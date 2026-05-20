@@ -33,3 +33,6 @@ next-env.d.ts
 
 # vitest
 /coverage
+
+# claude code local settings
+.claude/settings.local.json
