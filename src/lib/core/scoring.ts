@@ -1,0 +1,169 @@
+import {
+  AvailabilityEntry,
+  AvailabilityStatus,
+  CampaignMember,
+  DEFAULT_WEIGHTS,
+  ScoringWeights,
+  SchedulingRound,
+  TimeSlot,
+  slotKeyId,
+} from "./types";
+
+export interface SlotScore {
+  date: string;
+  timeSlot: TimeSlot;
+  available: number;
+  maybe: number;
+  unavailable: number;
+  noResponse: number;
+  total: number;
+  potential: number; // available + maybe
+  score: number;
+  heat: number; // 0..1, share of members available — drives heatmap intensity
+}
+
+export type RecommendationKind = "best" | "backup" | "avoid";
+
+export interface Recommendation {
+  kind: RecommendationKind;
+  slot: SlotScore;
+}
+
+interface ScoreInput {
+  round: Pick<SchedulingRound, "dates" | "timeSlots">;
+  members: CampaignMember[];
+  entries: AvailabilityEntry[];
+  hostMemberId?: string;
+  weights?: ScoringWeights;
+}
+
+/**
+ * Score every (date × timeSlot) cell in a round.
+ * Pure function — no IO — so it is trivially testable and reusable server-side.
+ */
+export function scoreRound({
+  round,
+  members,
+  entries,
+  hostMemberId,
+  weights = DEFAULT_WEIGHTS,
+}: ScoreInput): SlotScore[] {
+  const total = members.length;
+
+  // index entries by "date__slot" -> memberId -> status
+  const byCell = new Map<string, Map<string, AvailabilityStatus>>();
+  for (const e of entries) {
+    const key = slotKeyId(e.date, e.timeSlot);
+    let m = byCell.get(key);
+    if (!m) {
+      m = new Map();
+      byCell.set(key, m);
+    }
+    m.set(e.memberId, e.status);
+  }
+
+  const scores: SlotScore[] = [];
+  for (const date of round.dates) {
+    for (const timeSlot of round.timeSlots) {
+      const cell = byCell.get(slotKeyId(date, timeSlot));
+      let available = 0;
+      let maybe = 0;
+      let unavailable = 0;
+      let hostAvailable = false;
+
+      if (cell) {
+        for (const [memberId, status] of cell) {
+          if (status === "available") {
+            available++;
+            if (memberId === hostMemberId) hostAvailable = true;
+          } else if (status === "maybe") {
+            maybe++;
+          } else if (status === "unavailable") {
+            unavailable++;
+          }
+        }
+      }
+
+      const responded = available + maybe + unavailable;
+      const noResponse = Math.max(0, total - responded);
+      const hostBonus = hostAvailable ? weights.hostBonus : 0;
+      const score =
+        available * weights.available +
+        maybe * weights.maybe +
+        unavailable * weights.unavailable +
+        hostBonus;
+
+      scores.push({
+        date,
+        timeSlot,
+        available,
+        maybe,
+        unavailable,
+        noResponse,
+        total,
+        potential: available + maybe,
+        score,
+        heat: total > 0 ? available / total : 0,
+      });
+    }
+  }
+
+  return scores;
+}
+
+/**
+ * Rank scored slots: highest score first, then fewest unavailable,
+ * then highest potential, then earliest date for stability.
+ */
+export function rankSlots(scores: SlotScore[]): SlotScore[] {
+  return [...scores].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (a.unavailable !== b.unavailable) return a.unavailable - b.unavailable;
+    if (b.potential !== a.potential) return b.potential - a.potential;
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    return 0;
+  });
+}
+
+/**
+ * Produce Best / Backup / Avoid recommendations.
+ * - best: top-ranked slot with at least one available player.
+ * - backup: next-ranked slot on a *different date* where possible.
+ * - avoid: a slot with a negative score or a majority unavailable (only if it
+ *   is meaningfully bad and distinct from best/backup).
+ */
+export function recommend(scores: SlotScore[]): Recommendation[] {
+  const ranked = rankSlots(scores).filter((s) => s.total > 0);
+  const out: Recommendation[] = [];
+  if (ranked.length === 0) return out;
+
+  const best = ranked.find((s) => s.available + s.maybe > 0);
+  if (!best) return out;
+  out.push({ kind: "best", slot: best });
+
+  const backup =
+    ranked.find(
+      (s) => s !== best && s.date !== best.date && s.available + s.maybe > 0,
+    ) ?? ranked.find((s) => s !== best && s.available + s.maybe > 0);
+  if (backup) out.push({ kind: "backup", slot: backup });
+
+  // Worst slot: lowest score. Only surface as "avoid" if it is genuinely bad.
+  const worst = ranked[ranked.length - 1];
+  const isUsed = worst === best || worst === backup;
+  const isBad = worst.score < 0 || worst.unavailable > worst.available;
+  if (!isUsed && isBad && worst.unavailable > 0) {
+    out.push({ kind: "avoid", slot: worst });
+  }
+
+  return out;
+}
+
+/** Map a heat value (0..1) to a tailwind-friendly opacity bucket for the UI. */
+export function heatToIntensity(heat: number): number {
+  if (heat <= 0) return 0;
+  if (heat < 0.25) return 1;
+  if (heat < 0.5) return 2;
+  if (heat < 0.75) return 3;
+  if (heat < 1) return 4;
+  return 5;
+}

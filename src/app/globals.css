@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme (fallback) */
+    --background: 250 30% 98%;
+    --foreground: 250 30% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 250 30% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 250 30% 12%;
+    --primary: 265 80% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 250 20% 92%;
+    --secondary-foreground: 250 30% 20%;
+    --muted: 250 20% 92%;
+    --muted-foreground: 250 10% 40%;
+    --accent: 38 92% 55%;
+    --accent-foreground: 38 60% 10%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 250 20% 86%;
+    --input: 250 20% 86%;
+    --ring: 265 80% 60%;
+
+    --avail: 152 60% 45%;
+    --maybe: 38 92% 55%;
+    --unavail: 0 72% 55%;
+
+    --radius: 1rem;
+    --font-sans: "Inter", system-ui, sans-serif;
+    --font-display: "Cinzel", "Georgia", serif;
+  }
+
+  .dark {
+    /* Dark fantasy — deep slate + arcane purple/amber */
+    --background: 250 30% 7%;
+    --foreground: 250 20% 92%;
+    --card: 250 28% 11%;
+    --card-foreground: 250 20% 92%;
+    --popover: 250 30% 9%;
+    --popover-foreground: 250 20% 92%;
+    --primary: 265 85% 68%;
+    --primary-foreground: 250 40% 8%;
+    --secondary: 250 22% 16%;
+    --secondary-foreground: 250 20% 88%;
+    --muted: 250 20% 16%;
+    --muted-foreground: 250 12% 60%;
+    --accent: 38 95% 60%;
+    --accent-foreground: 38 60% 8%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 250 20% 20%;
+    --input: 250 20% 22%;
+    --ring: 265 85% 68%;
+
+    --avail: 152 58% 48%;
+    --maybe: 38 92% 58%;
+    --unavail: 0 70% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    /* subtle arcane backdrop */
+    background-image:
+      radial-gradient(60% 50% at 50% 0%, hsl(var(--primary) / 0.10), transparent 70%),
+      radial-gradient(40% 40% at 100% 100%, hsl(var(--accent) / 0.06), transparent 70%);
+    background-attachment: fixed;
+    min-height: 100dvh;
+  }
+  /* prevent text selection while drag-painting the grid */
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+@layer utilities {
+  .glass {
+    background: hsl(var(--card) / 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
