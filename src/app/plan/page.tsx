@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { AvailabilityGrid } from "@/components/availability/availability-grid";
 import { BulkMark } from "@/components/availability/bulk-mark";
+import { VoiceMark } from "@/components/availability/voice-mark";
 import { StatusChip } from "@/components/availability/status";
 import { RecommendationCard } from "@/components/scoring/recommendation-card";
 import { InviteSheet } from "@/components/campaign/invite-sheet";
@@ -36,7 +37,7 @@ import {
   TimeSlot,
 } from "@/lib/core/types";
 import { SlotScore } from "@/lib/core/scoring";
-import { formatDateLabel } from "@/lib/utils";
+import { formatDateLabel, todayISO } from "@/lib/utils";
 
 function PlanInner() {
   const code = useSearchParams().get("code") ?? "";
@@ -187,6 +188,11 @@ function PlanInner() {
           <StatusChip status="maybe" className="text-xs" />
           <StatusChip status="unavailable" className="text-xs" />
         </div>
+
+        {/* Voice / typed marking */}
+        {myMemberId && (
+          <VoiceMark round={round} today={todayISO()} onApply={onBulk} />
+        )}
 
         {/* Bulk marking */}
         {myMemberId && <BulkMark round={round} onApply={onBulk} />}
