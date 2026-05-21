@@ -15,6 +15,14 @@ export type AvailabilityStatus = "available" | "maybe" | "unavailable";
 
 export type MemberRole = "dm" | "player";
 
+export interface Account {
+  id: string;
+  email: string; // stored lowercased
+  passwordHash: string;
+  displayName: string;
+  createdAt: string;
+}
+
 export interface Campaign {
   id: string;
   name: string;
@@ -30,6 +38,7 @@ export interface Campaign {
 export interface CampaignSettings {
   weights: ScoringWeights;
   timeSlots: TimeSlot[];
+  minPlayers: number; // min available players (excluding the DM) for a viable session
 }
 
 export interface ScoringWeights {
@@ -43,6 +52,7 @@ export interface CampaignMember {
   id: string;
   campaignId: string;
   guestName?: string | null;
+  accountId?: string | null; // links this membership to a logged-in account
   role: MemberRole;
   color: string;
   joinedAt: string;
@@ -98,3 +108,5 @@ export const DEFAULT_WEIGHTS: ScoringWeights = {
   unavailable: -2,
   hostBonus: 1,
 };
+
+export const DEFAULT_MIN_PLAYERS = 2;

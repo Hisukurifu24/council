@@ -1,8 +1,10 @@
 import {
+  Account,
   AvailabilityEntry,
   Campaign,
   CampaignMember,
   CampaignSettings,
+  DEFAULT_MIN_PLAYERS,
   DEFAULT_WEIGHTS,
   SchedulingRound,
   Session,
@@ -12,10 +14,31 @@ import {
 // Row shapes returned by Supabase (snake_case). Kept loose on purpose.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+export function rowToAccount(r: any): Account {
+  return {
+    id: r.id,
+    email: r.email,
+    passwordHash: r.password_hash,
+    displayName: r.display_name,
+    createdAt: r.created_at,
+  };
+}
+
+export function accountToRow(a: Account) {
+  return {
+    id: a.id,
+    email: a.email,
+    password_hash: a.passwordHash,
+    display_name: a.displayName,
+    created_at: a.createdAt,
+  };
+}
+
 export function rowToCampaign(r: any): Campaign {
   const settings: CampaignSettings = {
     weights: r.settings?.weights ?? DEFAULT_WEIGHTS,
     timeSlots: (r.settings?.timeSlots ?? ["morning", "afternoon", "evening"]) as TimeSlot[],
+    minPlayers: r.settings?.minPlayers ?? DEFAULT_MIN_PLAYERS,
   };
   return {
     id: r.id,
@@ -49,6 +72,7 @@ export function rowToMember(r: any): CampaignMember {
     id: r.id,
     campaignId: r.campaign_id,
     guestName: r.guest_name ?? null,
+    accountId: r.account_id ?? null,
     role: r.role,
     color: r.color,
     joinedAt: r.joined_at,
@@ -60,6 +84,7 @@ export function memberToRow(m: CampaignMember) {
     id: m.id,
     campaign_id: m.campaignId,
     guest_name: m.guestName ?? null,
+    account_id: m.accountId ?? null,
     role: m.role,
     color: m.color,
     joined_at: m.joinedAt,
@@ -67,7 +92,7 @@ export function memberToRow(m: CampaignMember) {
 }
 
 export const MEMBER_COLUMNS =
-  "id, campaign_id, guest_name, role, color, joined_at";
+  "id, campaign_id, guest_name, account_id, role, color, joined_at";
 
 export function rowToRound(r: any): SchedulingRound {
   return {

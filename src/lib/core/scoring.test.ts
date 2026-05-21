@@ -76,6 +76,23 @@ describe("scoreRound", () => {
     expect(cell.noResponse).toBe(2);
   });
 
+  it("counts playersAvailable excluding the DM", () => {
+    const members = [member("dm", "dm"), member("p1"), member("p2")];
+    const cell = scoreRound({
+      round,
+      members,
+      hostMemberId: "dm",
+      entries: [
+        entry("dm", "2026-05-22", "evening", "available"),
+        entry("p1", "2026-05-22", "evening", "available"),
+        entry("p2", "2026-05-22", "evening", "available"),
+      ],
+    }).find((s) => s.date === "2026-05-22" && s.timeSlot === "evening")!;
+
+    expect(cell.available).toBe(3); // includes the DM
+    expect(cell.playersAvailable).toBe(2); // excludes the DM
+  });
+
   it("applies the host availability bonus", () => {
     const members = [member("dm", "dm"), member("p1")];
     const base = scoreRound({
@@ -155,6 +172,40 @@ describe("recommend", () => {
     expect(recommend(scoreRound({ round, members: [], entries: [] }))).toEqual(
       [],
     );
+  });
+
+  it("requires minPlayers available (excluding the DM) for a viable slot", () => {
+    const members = [member("dm", "dm"), member("p1"), member("p2")];
+    const scores = scoreRound({
+      round,
+      members,
+      hostMemberId: "dm",
+      entries: [
+        entry("dm", "2026-05-22", "evening", "available"),
+        entry("p1", "2026-05-22", "evening", "available"),
+        entry("p2", "2026-05-22", "evening", "available"),
+      ],
+    });
+
+    // 2 players available (DM excluded): meets a threshold of 2, not 3.
+    expect(recommend(scores, 2).some((r) => r.kind === "best")).toBe(true);
+    expect(recommend(scores, 3)).toEqual([]);
+  });
+
+  it("does not count the DM toward the minPlayers threshold", () => {
+    const members = [member("dm", "dm"), member("p1")];
+    const scores = scoreRound({
+      round,
+      members,
+      hostMemberId: "dm",
+      entries: [
+        entry("dm", "2026-05-22", "evening", "available"),
+        entry("p1", "2026-05-22", "evening", "available"),
+      ],
+    });
+    // Only 1 real player free, so a threshold of 2 yields no recommendation.
+    expect(recommend(scores, 1).some((r) => r.kind === "best")).toBe(true);
+    expect(recommend(scores, 2)).toEqual([]);
   });
 });
 

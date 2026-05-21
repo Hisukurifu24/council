@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Crown, Star } from "lucide-react";
+import { Check, Crown, Star } from "lucide-react";
 import {
   AvailabilityStatus,
   SchedulingRound,
@@ -33,6 +33,9 @@ const HEAT_BG = [
   "hsl(var(--avail) / 0.62)",
 ];
 
+const LONG_PRESS_MS = 280; // hold this long on touch to start drag-painting
+const MOVE_CANCEL_PX = 10; // finger moves more than this before the hold → it's a scroll
+
 export function AvailabilityGrid({
   round,
   model,
@@ -40,32 +43,101 @@ export function AvailabilityGrid({
   onSet,
   canEdit,
 }: Props) {
-  // drag-paint state (mouse only — touch uses tap so vertical scroll still works)
+  const gridRef = React.useRef<HTMLDivElement>(null);
+
+  // The status currently being painted (non-null while a drag is active, for
+  // both mouse and touch). Touch additionally uses a long-press to *start*.
   const painting = React.useRef<AvailabilityStatus | null>(null);
+  const touchStart = React.useRef<{ x: number; y: number } | null>(null);
+  const longPressTimer = React.useRef<number | null>(null);
 
-  React.useEffect(() => {
-    const stop = () => (painting.current = null);
-    window.addEventListener("pointerup", stop);
-    window.addEventListener("pointercancel", stop);
-    return () => {
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-    };
-  }, []);
+  const apply = React.useCallback(
+    (date: string, slot: TimeSlot, status: AvailabilityStatus) => {
+      if (!canEdit) return;
+      onSet(date, slot, status);
+    },
+    [canEdit, onSet],
+  );
 
-  const apply = (date: string, slot: TimeSlot, status: AvailabilityStatus) => {
-    if (!canEdit) return;
-    onSet(date, slot, status);
+  const startPaint = (date: string, slot: TimeSlot) => {
+    const next = cycleStatus(myStatus(date, slot));
+    painting.current = next;
+    apply(date, slot, next);
+  };
+
+  const paintAt = (date: string, slot: TimeSlot) => {
+    if (painting.current != null) apply(date, slot, painting.current);
   };
 
   const handleTap = (date: string, slot: TimeSlot) => {
-    if (!canEdit) return;
     apply(date, slot, cycleStatus(myStatus(date, slot)));
   };
+
+  React.useEffect(() => {
+    const clearTimer = () => {
+      if (longPressTimer.current != null) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+    };
+    const stop = () => {
+      painting.current = null;
+      touchStart.current = null;
+      clearTimer();
+    };
+
+    const cellFromPoint = (x: number, y: number) => {
+      const el = document.elementFromPoint(x, y);
+      const btn = el?.closest("[data-date]") as HTMLElement | null;
+      const date = btn?.getAttribute("data-date");
+      const slot = btn?.getAttribute("data-slot") as TimeSlot | null;
+      return date && slot ? { date, slot } : null;
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType === "mouse") return; // mouse drag uses onPointerEnter
+      if (painting.current != null) {
+        const cell = cellFromPoint(e.clientX, e.clientY);
+        if (cell) paintAt(cell.date, cell.slot);
+        return;
+      }
+      // Before the long-press fires: a real finger move means the user is
+      // scrolling, so cancel the pending paint and let the page scroll.
+      const start = touchStart.current;
+      if (start && longPressTimer.current != null) {
+        if (
+          Math.abs(e.clientX - start.x) > MOVE_CANCEL_PX ||
+          Math.abs(e.clientY - start.y) > MOVE_CANCEL_PX
+        ) {
+          stop();
+        }
+      }
+    };
+
+    // Block scrolling only while actively painting on touch.
+    const onTouchMove = (e: TouchEvent) => {
+      if (painting.current != null) e.preventDefault();
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    const gridEl = gridRef.current;
+    gridEl?.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      gridEl?.removeEventListener("touchmove", onTouchMove);
+      clearTimer();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apply, myStatus]);
 
   return (
     <div className="no-select">
       <div
+        ref={gridRef}
         className="grid gap-2"
         style={{ gridTemplateColumns: `4.5rem repeat(${round.timeSlots.length}, 1fr)` }}
       >
@@ -96,6 +168,9 @@ export function AvailabilityGrid({
                 const mine = myStatus(date, slot);
                 const isBest = model.bestId === id;
                 const isBackup = model.backupId === id;
+                const isViable =
+                  model.minPlayers > 0 &&
+                  (score?.playersAvailable ?? 0) >= model.minPlayers;
                 const intensity = heatToIntensity(score?.heat ?? 0);
 
                 return (
@@ -103,31 +178,61 @@ export function AvailabilityGrid({
                     key={id}
                     type="button"
                     disabled={!canEdit}
+                    data-date={date}
+                    data-slot={slot}
                     aria-label={`${weekday} ${day} ${TIME_SLOT_LABELS[slot]}: ${
                       score?.available ?? 0
                     } available${
                       score?.maybe ? `, ${score.maybe} maybe` : ""
-                    }. Your status: ${mine ?? "not set"}.`}
-                    onClick={() => handleTap(date, slot)}
+                    }${isViable ? ", viable session" : ""}. Your status: ${
+                      mine ?? "not set"
+                    }.`}
                     onPointerDown={(e) => {
-                      if (e.pointerType !== "mouse" || !canEdit) return;
-                      const next = cycleStatus(myStatus(date, slot));
-                      painting.current = next;
-                      apply(date, slot, next);
+                      if (!canEdit) return;
+                      if (e.pointerType === "mouse") {
+                        startPaint(date, slot);
+                        return;
+                      }
+                      // touch / pen: arm a long-press to begin drag-painting
+                      touchStart.current = { x: e.clientX, y: e.clientY };
+                      if (longPressTimer.current != null)
+                        clearTimeout(longPressTimer.current);
+                      longPressTimer.current = window.setTimeout(() => {
+                        longPressTimer.current = null;
+                        touchStart.current = null;
+                        startPaint(date, slot);
+                      }, LONG_PRESS_MS);
                     }}
                     onPointerEnter={(e) => {
+                      if (!canEdit || e.pointerType !== "mouse") return;
+                      paintAt(date, slot);
+                    }}
+                    onPointerUp={(e) => {
+                      if (!canEdit || e.pointerType === "mouse") return;
+                      // touch: released before the hold fired → it's a tap
                       if (
-                        e.pointerType !== "mouse" ||
-                        painting.current == null ||
-                        !canEdit
-                      )
-                        return;
-                      apply(date, slot, painting.current);
+                        painting.current == null &&
+                        longPressTimer.current != null
+                      ) {
+                        clearTimeout(longPressTimer.current);
+                        longPressTimer.current = null;
+                        touchStart.current = null;
+                        handleTap(date, slot);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (!canEdit) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleTap(date, slot);
+                      }
                     }}
                     className={cn(
                       "relative flex h-16 flex-col items-center justify-center rounded-xl border transition-all",
                       "border-border/70",
                       canEdit ? "hover:border-primary/60" : "cursor-default",
+                      isViable && !isBest && !isBackup &&
+                        "ring-1 ring-[hsl(var(--avail))]",
                       isBest && "ring-2 ring-primary shadow-glow",
                       isBackup && "ring-1 ring-accent/70",
                     )}
@@ -138,6 +243,9 @@ export function AvailabilityGrid({
                     )}
                     {isBackup && !isBest && (
                       <Star className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-accent p-0.5 text-accent-foreground" />
+                    )}
+                    {isViable && !isBest && !isBackup && (
+                      <Check className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-[hsl(var(--avail))] p-0.5 text-background" />
                     )}
 
                     <div className="flex items-baseline gap-1 leading-none">

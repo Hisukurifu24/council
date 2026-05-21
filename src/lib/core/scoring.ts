@@ -18,6 +18,7 @@ export interface SlotScore {
   noResponse: number;
   total: number;
   potential: number; // available + maybe
+  playersAvailable: number; // available excluding the DM — gates session viability
   score: number;
   heat: number; // 0..1, share of members available — drives heatmap intensity
 }
@@ -102,6 +103,7 @@ export function scoreRound({
         noResponse,
         total,
         potential: available + maybe,
+        playersAvailable: available - (hostAvailable ? 1 : 0),
         score,
         heat: total > 0 ? available / total : 0,
       });
@@ -126,25 +128,36 @@ export function rankSlots(scores: SlotScore[]): SlotScore[] {
 }
 
 /**
+ * Whether a slot has enough available players (excluding the DM) to be a
+ * viable session, per the campaign's minPlayers setting.
+ */
+export function isViable(slot: SlotScore, minPlayers: number): boolean {
+  return slot.playersAvailable >= minPlayers;
+}
+
+/**
  * Produce Best / Backup / Avoid recommendations.
- * - best: top-ranked slot with at least one available player.
- * - backup: next-ranked slot on a *different date* where possible.
+ * - best: top-ranked slot meeting the minPlayers threshold (excluding the DM).
+ * - backup: next-ranked viable slot on a *different date* where possible.
  * - avoid: a slot with a negative score or a majority unavailable (only if it
  *   is meaningfully bad and distinct from best/backup).
  */
-export function recommend(scores: SlotScore[]): Recommendation[] {
+export function recommend(
+  scores: SlotScore[],
+  minPlayers = 1,
+): Recommendation[] {
   const ranked = rankSlots(scores).filter((s) => s.total > 0);
   const out: Recommendation[] = [];
   if (ranked.length === 0) return out;
 
-  const best = ranked.find((s) => s.available + s.maybe > 0);
+  const best = ranked.find((s) => isViable(s, minPlayers));
   if (!best) return out;
   out.push({ kind: "best", slot: best });
 
   const backup =
     ranked.find(
-      (s) => s !== best && s.date !== best.date && s.available + s.maybe > 0,
-    ) ?? ranked.find((s) => s !== best && s.available + s.maybe > 0);
+      (s) => s !== best && s.date !== best.date && isViable(s, minPlayers),
+    ) ?? ranked.find((s) => s !== best && isViable(s, minPlayers));
   if (backup) out.push({ kind: "backup", slot: backup });
 
   // Worst slot: lowest score. Only surface as "avoid" if it is genuinely bad.

@@ -1,4 +1,5 @@
 import {
+  Account,
   AvailabilityEntry,
   Campaign,
   CampaignMember,
@@ -11,7 +12,7 @@ import type { DB } from "../store";
 export interface StoreApi {
   getSnapshot(): DB;
   setSnapshot(db: DB): void;
-  getKnownCampaignIds(): string[];
+  upsertAccount(a: Account): void;
   upsertCampaign(c: Campaign): void;
   upsertMember(m: CampaignMember): void;
   upsertRound(r: SchedulingRound): void;
@@ -30,13 +31,17 @@ export interface Backend {
   start(): void;
 
   ensureCampaign(code: string): Promise<void>;
-  ensureMyCampaigns(): Promise<void>;
+  ensureAccountCampaigns(accountId: string): Promise<void>;
+
+  findAccountByEmail(email: string): Promise<Account | null>;
+  persistAccount(account: Account): Promise<void>;
 
   persistCreateCampaign(
     campaign: Campaign,
     host: CampaignMember,
     round: SchedulingRound,
   ): Promise<void>;
+  persistUpdateCampaign(campaign: Campaign): Promise<void>;
   persistJoinMember(member: CampaignMember): Promise<void>;
   persistSetAvailability(
     entry: AvailabilityEntry,

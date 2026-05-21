@@ -46,9 +46,9 @@ export default function LandingPage() {
             <span className="text-primary">Discord.</span>
           </h1>
           <p className="mt-4 max-w-md text-lg text-muted-foreground">
-            Drop in your dates, let everyone tap their availability, and Council
-            instantly surfaces the best session time. No spreadsheets. No login
-            to join.
+            Everyone taps their availability across the next few weeks and
+            Council instantly surfaces the best session time. No spreadsheets —
+            just a quick sign-in so your campaigns follow you.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -74,7 +74,7 @@ export default function LandingPage() {
           {[
             { Icon: Zap, t: "Instant", d: "Tap to mark a slot. Scores update live across every device." },
             { Icon: Sparkles, t: "Smart", d: "Best / backup / avoid picks computed from real attendance." },
-            { Icon: Users, t: "Frictionless", d: "Share a link or QR. Players join with just a name." },
+            { Icon: Users, t: "Frictionless", d: "Share a link or QR. Players sign in and start tapping." },
           ].map(({ Icon, t, d }) => (
             <div
               key={t}

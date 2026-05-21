@@ -2,51 +2,30 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck } from "lucide-react";
+import { CalendarCheck, Minus, Plus } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { AuthGate } from "@/components/auth/auth-gate";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
-import { TIME_SLOTS, TIME_SLOT_LABELS, TimeSlot } from "@/lib/core/types";
+import { DEFAULT_MIN_PLAYERS } from "@/lib/core/types";
 import { createCampaignSchema } from "@/lib/core/schemas";
 import { createCampaign } from "@/lib/store";
-import { cn, formatDateLabel, nextNDays } from "@/lib/utils";
+import { useCurrentAccount } from "@/lib/hooks";
 
-export default function CreatePage() {
+function CreateInner() {
   const router = useRouter();
+  const account = useCurrentAccount();
   const [name, setName] = React.useState("");
-  const [hostName, setHostName] = React.useState("");
   const [description, setDescription] = React.useState("");
-  const [slots, setSlots] = React.useState<TimeSlot[]>([...TIME_SLOTS]);
-  const [dates, setDates] = React.useState<string[]>([]);
+  const [minPlayers, setMinPlayers] = React.useState(DEFAULT_MIN_PLAYERS);
   const [error, setError] = React.useState<string>("");
-
-  const candidates = React.useMemo(() => nextNDays(14), []);
-
-  const toggleDate = (d: string) =>
-    setDates((cur) =>
-      cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].sort(),
-    );
-
-  const toggleSlot = (s: TimeSlot) =>
-    setSlots((cur) =>
-      cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s],
-    );
-
-  const pickWeekends = () =>
-    setDates(
-      candidates.filter((d) => {
-        const day = new Date(d + "T00:00:00").getDay();
-        return day === 5 || day === 6 || day === 0; // Fri/Sat/Sun
-      }),
-    );
 
   const submit = () => {
     const parsed = createCampaignSchema.safeParse({
       name,
-      hostName,
+      hostName: account?.displayName ?? "",
       description: description || undefined,
-      dates,
-      timeSlots: slots,
+      minPlayers,
     });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Please check the form.");
@@ -57,7 +36,7 @@ export default function CreatePage() {
   };
 
   return (
-    <AppShell title="New campaign" back="/">
+    <AppShell title="New campaign" back="/dashboard">
       <div className="space-y-6">
         <div>
           <Label htmlFor="name">Campaign name</Label>
@@ -71,80 +50,33 @@ export default function CreatePage() {
         </div>
 
         <div>
-          <Label htmlFor="host">Your name</Label>
-          <Input
-            id="host"
-            placeholder="Dungeon Master"
-            value={hostName}
-            onChange={(e) => setHostName(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <div className="mb-1.5 flex items-center justify-between">
-            <Label className="mb-0">Candidate dates</Label>
-            <div className="flex gap-3 text-xs">
-              <button
-                className="text-primary hover:underline"
-                onClick={pickWeekends}
-                type="button"
-              >
-                Weekends
-              </button>
-              <button
-                className="text-muted-foreground hover:underline"
-                onClick={() => setDates([])}
-                type="button"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-            {candidates.map((d) => {
-              const { weekday, day } = formatDateLabel(d);
-              const on = dates.includes(d);
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => toggleDate(d)}
-                  className={cn(
-                    "flex flex-col items-center rounded-xl border py-2 text-xs transition-all active:scale-95",
-                    on
-                      ? "border-primary bg-primary/15 text-primary"
-                      : "border-border/60 text-muted-foreground hover:border-border",
-                  )}
-                >
-                  <span className="font-semibold">{weekday}</span>
-                  <span>{day.replace(/^\w+ /, "")}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div>
-          <Label className="mb-0">Time slots</Label>
-          <div className="mt-1.5 flex gap-2">
-            {TIME_SLOTS.map((s) => {
-              const on = slots.includes(s);
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => toggleSlot(s)}
-                  className={cn(
-                    "flex-1 rounded-xl border py-2.5 text-sm font-medium transition-all active:scale-95",
-                    on
-                      ? "border-primary bg-primary/15 text-primary"
-                      : "border-border/60 text-muted-foreground",
-                  )}
-                >
-                  {TIME_SLOT_LABELS[s]}
-                </button>
-              );
-            })}
+          <Label>Minimum players for a session</Label>
+          <p className="mb-2 text-xs text-muted-foreground">
+            How many players (not counting you, the DM) must be available before a
+            day counts as a viable session.
+          </p>
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Decrease"
+              onClick={() => setMinPlayers((n) => Math.max(0, n - 1))}
+            >
+              <Minus className="h-5 w-5" />
+            </Button>
+            <span className="min-w-10 text-center font-display text-2xl tabular-nums">
+              {minPlayers}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Increase"
+              onClick={() => setMinPlayers((n) => Math.min(50, n + 1))}
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
           </div>
         </div>
 
@@ -158,6 +90,11 @@ export default function CreatePage() {
           />
         </div>
 
+        <p className="text-xs text-muted-foreground">
+          Dates are filled in automatically — the next 5 weeks, morning /
+          afternoon / evening. Everyone just marks their availability.
+        </p>
+
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <Button className="w-full" size="lg" onClick={submit}>
@@ -166,5 +103,13 @@ export default function CreatePage() {
         </Button>
       </div>
     </AppShell>
+  );
+}
+
+export default function CreatePage() {
+  return (
+    <AuthGate>
+      <CreateInner />
+    </AuthGate>
   );
 }

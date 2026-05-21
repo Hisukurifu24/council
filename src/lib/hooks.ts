@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
+  ensureAccountCampaigns,
   ensureCampaign,
-  ensureMyCampaigns,
   getActiveRound,
   getCampaignByCode,
+  getCurrentAccount,
   getEntriesForRound,
   getMembers,
   getMyCampaigns,
@@ -28,8 +29,11 @@ import {
   SchedulingRound,
   Session,
   slotKeyId,
+  TIME_SLOTS,
   AvailabilityStatus,
 } from "./core/types";
+import type { AuthSession } from "./auth";
+import { rollingDates } from "./utils";
 
 /** Subscribe to the whole store; re-renders on any change (local or cross-tab). */
 export function useDb() {
@@ -44,8 +48,8 @@ export function useMounted() {
 }
 
 /**
- * Loads a campaign (and its round/members/entries/sessions) by invite code.
- * No-op + instant in local mode; fetches + subscribes in Supabase mode.
+ * Loads a campaign (and its round/members/entries/sessions) by invite code
+ * from Supabase and subscribes to realtime updates.
  * Returns true while the initial load is in flight.
  */
 export function useEnsureCampaign(code: string): boolean {
@@ -63,11 +67,19 @@ export function useEnsureCampaign(code: string): boolean {
   return loading;
 }
 
-/** Loads the signed-in user's campaigns (Supabase mode); no-op locally. */
+/** Loads the signed-in account's campaigns into the store. */
 export function useEnsureMyCampaigns() {
   useEffect(() => {
-    void ensureMyCampaigns();
+    void ensureAccountCampaigns();
   }, []);
+}
+
+/** The currently logged-in account session, or null. Re-renders on auth change. */
+export function useCurrentAccount(): AuthSession | null {
+  useDb();
+  const mounted = useMounted();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => (mounted ? getCurrentAccount() : null), [mounted, getSnapshot()]);
 }
 
 export interface CampaignBundle {
@@ -86,12 +98,23 @@ export function useCampaign(code: string): CampaignBundle {
     if (!campaign) {
       return { members: [], entries: [], sessions: [], myMemberId: null };
     }
-    const round = getActiveRound(campaign.id);
+    const realRound = getActiveRound(campaign.id);
+    // Display a rolling window (today → ~5 weeks) regardless of when the round
+    // was created, so the planner never expires. Entries keep their real round id.
+    const round: SchedulingRound | undefined = realRound
+      ? {
+          ...realRound,
+          dates: rollingDates(),
+          timeSlots: realRound.timeSlots?.length
+            ? realRound.timeSlots
+            : [...TIME_SLOTS],
+        }
+      : undefined;
     return {
       campaign,
       members: getMembers(campaign.id),
       round,
-      entries: round ? getEntriesForRound(round.id) : [],
+      entries: realRound ? getEntriesForRound(realRound.id) : [],
       sessions: getSessions(campaign.id),
       myMemberId: getMyMemberId(campaign.id),
     };
@@ -110,6 +133,7 @@ export interface ScoreModel {
   scores: SlotScore[];
   byCell: Map<string, SlotScore>;
   recommendations: Recommendation[];
+  minPlayers: number;
   bestId?: string;
   backupId?: string;
   avoidId?: string;
@@ -119,8 +143,9 @@ export function useScores(bundle: CampaignBundle): ScoreModel {
   const { campaign, round, members, entries } = bundle;
   return useMemo<ScoreModel>(() => {
     if (!round || !campaign) {
-      return { scores: [], byCell: new Map(), recommendations: [] };
+      return { scores: [], byCell: new Map(), recommendations: [], minPlayers: 0 };
     }
+    const minPlayers = campaign.settings.minPlayers ?? 1;
     const scores = scoreRound({
       round,
       members,
@@ -131,7 +156,7 @@ export function useScores(bundle: CampaignBundle): ScoreModel {
     const byCell = new Map<string, SlotScore>();
     for (const s of scores) byCell.set(slotKeyId(s.date, s.timeSlot), s);
 
-    const recommendations = recommend(scores);
+    const recommendations = recommend(scores, minPlayers);
     const find = (k: Recommendation["kind"]) => {
       const r = recommendations.find((x) => x.kind === k);
       return r ? slotKeyId(r.slot.date, r.slot.timeSlot) : undefined;
@@ -140,6 +165,7 @@ export function useScores(bundle: CampaignBundle): ScoreModel {
       scores,
       byCell,
       recommendations,
+      minPlayers,
       bestId: find("best"),
       backupId: find("backup"),
       avoidId: find("avoid"),

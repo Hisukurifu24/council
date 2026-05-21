@@ -19,10 +19,22 @@ export const createCampaignSchema = z.object({
   name: z.string().trim().min(1, "Name your campaign").max(80),
   description: z.string().trim().max(300).optional(),
   hostName: z.string().trim().min(1, "Enter your name").max(40),
-  dates: z.array(z.string()).min(1, "Pick at least one date"),
-  timeSlots: z.array(timeSlotSchema).min(1),
+  minPlayers: z.number().int().min(0).max(50),
 });
 export type CreateCampaignInput = z.infer<typeof createCampaignSchema>;
+
+export const signUpSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email"),
+  password: z.string().min(4, "Use at least 4 characters").max(100),
+  displayName: z.string().trim().min(1, "Enter your name").max(40),
+});
+export type SignUpInput = z.infer<typeof signUpSchema>;
+
+export const logInSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email"),
+  password: z.string().min(1, "Enter your password").max(100),
+});
+export type LogInInput = z.infer<typeof logInSchema>;
 
 export const joinCampaignSchema = z.object({
   inviteCode: z.string().trim().min(1),

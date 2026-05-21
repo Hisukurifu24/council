@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { Plus, Users, ChevronRight, Settings } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { AuthGate } from "@/components/auth/auth-gate";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useMyCampaigns, useMounted, useEnsureMyCampaigns } from "@/lib/hooks";
 import { getMembers, getSessions } from "@/lib/store";
 
-export default function DashboardPage() {
+function DashboardInner() {
   const mounted = useMounted();
   const campaigns = useMyCampaigns();
   useEnsureMyCampaigns();
@@ -80,5 +81,13 @@ export default function DashboardPage() {
         </ul>
       )}
     </AppShell>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <AuthGate>
+      <DashboardInner />
+    </AuthGate>
   );
 }

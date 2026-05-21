@@ -1,20 +1,47 @@
 "use client";
 
 import * as React from "react";
-import { Moon, Sun, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { LogOut, Moon, Sun, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/providers";
-import { resetStore } from "@/lib/store";
+import { logOut, resetStore } from "@/lib/store";
+import { useCurrentAccount } from "@/lib/hooks";
 
 export default function SettingsPage() {
   const { theme, toggle } = useTheme();
+  const router = useRouter();
+  const account = useCurrentAccount();
   const [confirm, setConfirm] = React.useState(false);
 
   return (
     <AppShell title="Settings" back="/dashboard">
       <div className="space-y-3">
+        {account && (
+          <Card>
+            <CardContent className="flex items-center justify-between pt-4">
+              <div className="min-w-0">
+                <div className="truncate font-medium">{account.displayName}</div>
+                <div className="truncate text-sm text-muted-foreground">
+                  {account.email}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  logOut();
+                  router.push("/");
+                }}
+              >
+                <LogOut className="h-4 w-4" />
+                Log out
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardContent className="flex items-center justify-between pt-4">
             <div>

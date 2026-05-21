@@ -3,26 +3,39 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CalendarDays, Share2, UserPlus, CalendarCheck } from "lucide-react";
+import {
+  CalendarDays,
+  Share2,
+  UserPlus,
+  CalendarCheck,
+  Minus,
+  Plus,
+  Users,
+} from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { AuthGate } from "@/components/auth/auth-gate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { MemberList } from "@/components/campaign/member-list";
 import { InviteSheet } from "@/components/campaign/invite-sheet";
-import { useCampaign, useEnsureCampaign, useMounted } from "@/lib/hooks";
-import { joinAsGuest } from "@/lib/store";
+import {
+  useCampaign,
+  useCurrentAccount,
+  useEnsureCampaign,
+  useMounted,
+} from "@/lib/hooks";
+import { joinAsGuest, updateMinPlayers } from "@/lib/store";
 import { TIME_SLOT_LABELS } from "@/lib/core/types";
 import { formatDateLabel } from "@/lib/utils";
 
 function CampaignInner() {
   const code = useSearchParams().get("code") ?? "";
   const mounted = useMounted();
+  const account = useCurrentAccount();
   const loading = useEnsureCampaign(code);
   const bundle = useCampaign(code);
   const [invite, setInvite] = React.useState(false);
-  const [name, setName] = React.useState("");
 
   const { campaign, members, round, sessions, myMemberId } = bundle;
 
@@ -32,7 +45,7 @@ function CampaignInner() {
         <Card className="p-8 text-center">
           <p className="text-muted-foreground">
             We couldn&apos;t find a campaign for code{" "}
-            <span className="font-mono">{code}</span> on this device.
+            <span className="font-mono">{code}</span>.
           </p>
           <Link href="/" className="mt-4 inline-block">
             <Button variant="outline">Back home</Button>
@@ -44,10 +57,11 @@ function CampaignInner() {
 
   if (!campaign) return <AppShell title="Campaign" back="/" />;
 
+  const isDM = myMemberId === campaign.hostId;
+
   const join = () => {
-    if (!name.trim()) return;
-    joinAsGuest(campaign.id, name.trim());
-    setName("");
+    if (!account) return;
+    joinAsGuest(campaign.id, account.displayName);
   };
 
   const confirmed = sessions.filter((s) => s.status === "confirmed");
@@ -72,7 +86,7 @@ function CampaignInner() {
           <p className="text-sm text-muted-foreground">{campaign.description}</p>
         )}
 
-        {/* Join gate for new guests */}
+        {/* Join gate for new members */}
         {mounted && !myMemberId && (
           <Card className="border-primary/50">
             <CardContent className="pt-4">
@@ -80,19 +94,64 @@ function CampaignInner() {
                 <UserPlus className="h-4 w-4 text-primary" />
                 Join this campaign
               </div>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && join()}
-                  autoFocus
-                />
-                <Button onClick={join}>Join</Button>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                No account needed — just a name your party recognises.
+              <p className="mb-3 text-sm text-muted-foreground">
+                You&apos;ll join as{" "}
+                <span className="font-medium text-foreground">
+                  {account?.displayName}
+                </span>
+                .
               </p>
+              <Button className="w-full" onClick={join}>
+                Join campaign
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* DM: minimum players for a viable session */}
+        {myMemberId && isDM && (
+          <Card>
+            <CardContent className="flex items-center justify-between pt-4">
+              <div className="pr-3">
+                <div className="flex items-center gap-2 font-medium">
+                  <Users className="h-4 w-4 text-primary" />
+                  Min players per session
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Available players (excluding you) needed to flag a viable day.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Decrease"
+                  onClick={() =>
+                    updateMinPlayers(
+                      campaign.id,
+                      Math.max(0, campaign.settings.minPlayers - 1),
+                    )
+                  }
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <span className="min-w-8 text-center font-display text-xl tabular-nums">
+                  {campaign.settings.minPlayers}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Increase"
+                  onClick={() =>
+                    updateMinPlayers(
+                      campaign.id,
+                      Math.min(50, campaign.settings.minPlayers + 1),
+                    )
+                  }
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -177,7 +236,9 @@ function CampaignInner() {
 export default function CampaignPage() {
   return (
     <React.Suspense fallback={<AppShell title="Campaign" back="/" />}>
-      <CampaignInner />
+      <AuthGate>
+        <CampaignInner />
+      </AuthGate>
     </React.Suspense>
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  Account,
   AvailabilityStatus,
   Campaign,
   CampaignMember,
+  DEFAULT_MIN_PLAYERS,
   DEFAULT_WEIGHTS,
   SchedulingRound,
   Session,
@@ -12,22 +14,33 @@ import {
   AvailabilityEntry,
   slotKeyId,
 } from "./core/types";
-import { CreateCampaignInput, ConfirmSessionInput } from "./core/schemas";
-import { inviteCode, pickColor, randomId } from "./utils";
+import {
+  CreateCampaignInput,
+  ConfirmSessionInput,
+  SignUpInput,
+  LogInInput,
+} from "./core/schemas";
+import { inviteCode, pickColor, randomId, rollingDates } from "./utils";
+import {
+  clearCurrentAccount,
+  getCurrentAccount,
+  hashPassword,
+  setCurrentAccount,
+} from "./auth";
 import { Backend, StoreApi } from "./backends/types";
-import { LocalBackend } from "./backends/local-backend";
+import { SupabaseBackend } from "./backends/supabase-backend";
 
 /**
- * Data store with a swappable backend.
+ * Data store backed by Supabase (Postgres + Realtime via the anon client).
  *
  * Selectors stay synchronous (they read an in-memory snapshot), and mutations
  * are optimistic (snapshot + emit immediately, then the backend persists).
- * - LocalBackend: localStorage + BroadcastChannel (default, zero setup).
- * - SupabaseBackend: Postgres + Realtime via the anon client (when env set).
- * The UI never knows which backend is active.
+ * Identity is derived from the logged-in account's memberships — there is no
+ * device-local database or per-device identity map.
  */
 
 export interface DB {
+  accounts: Record<string, Account>;
   campaigns: Record<string, Campaign>;
   members: Record<string, CampaignMember>;
   rounds: Record<string, SchedulingRound>;
@@ -36,6 +49,7 @@ export interface DB {
 }
 
 const EMPTY_DB: DB = {
+  accounts: {},
   campaigns: {},
   members: {},
   rounds: {},
@@ -43,16 +57,24 @@ const EMPTY_DB: DB = {
   sessions: {},
 };
 
-const ME_KEY = "dndtime:me"; // campaignId -> memberId (who "you" are on this device)
-
 let snapshot: DB = EMPTY_DB;
 let hydrated = false;
 const listeners = new Set<() => void>();
 
-let backend: Backend = new LocalBackend();
+let backend: Backend = new SupabaseBackend();
 
 function emit() {
   for (const l of listeners) l();
+}
+
+/**
+ * Force a new snapshot reference + emit. Used when state that lives outside the
+ * snapshot changes (e.g. the auth session in localStorage) so subscribers
+ * relying on snapshot identity (useSyncExternalStore) actually re-render.
+ */
+function touch() {
+  snapshot = { ...snapshot };
+  emit();
 }
 
 export function avKey(
@@ -72,7 +94,10 @@ const api: StoreApi = {
     snapshot = db;
     emit();
   },
-  getKnownCampaignIds: () => getKnownCampaignIds(),
+  upsertAccount: (a) => {
+    snapshot = { ...snapshot, accounts: { ...snapshot.accounts, [a.id]: a } };
+    emit();
+  },
   upsertCampaign: (c) => {
     snapshot = { ...snapshot, campaigns: { ...snapshot.campaigns, [c.id]: c } };
     emit();
@@ -107,17 +132,21 @@ const api: StoreApi = {
   },
 };
 
-/** Called once on the client (by the Providers) to load + start syncing. */
-export function hydrate() {
+/**
+ * Called once on the client (by the Providers) to choose, init, and start the
+ * backend. Selection happens *here*, behind the `hydrated` guard, so React
+ * StrictMode's double-invoked effect can't install a second, uninitialised
+ * backend (which would make every write silently no-op).
+ */
+export function hydrate(makeBackend: () => Backend = () => new SupabaseBackend()) {
   if (hydrated || typeof window === "undefined") return;
   hydrated = true;
-  // Backend is chosen lazily here so env is available.
-  // (LocalBackend is the default already set above.)
+  backend = makeBackend();
   backend.init(api);
   backend.start();
 }
 
-/** Allows the auth layer to swap in the Supabase backend before hydration. */
+/** Allows tests to swap in a backend before hydration. */
 export function setBackend(b: Backend) {
   backend = b;
 }
@@ -143,29 +172,18 @@ export function getServerSnapshot(): DB {
 
 // ---- identity --------------------------------------------------------------
 
-function readMe(): Record<string, string> {
-  try {
-    return JSON.parse(localStorage.getItem(ME_KEY) ?? "{}");
-  } catch {
-    return {};
-  }
-}
-
+/**
+ * "Who you are" in a campaign: the member row owned by the logged-in account.
+ * Identity lives in Supabase (member.accountId), not on the device, so it
+ * follows you across devices and can never leak between accounts.
+ */
 export function getMyMemberId(campaignId: string): string | null {
-  if (typeof window === "undefined") return null;
-  return readMe()[campaignId] ?? null;
-}
-
-export function setMyMemberId(campaignId: string, memberId: string) {
-  const me = readMe();
-  me[campaignId] = memberId;
-  localStorage.setItem(ME_KEY, JSON.stringify(me));
-}
-
-/** Campaign ids this device has created or joined (drives the dashboard list). */
-export function getKnownCampaignIds(): string[] {
-  if (typeof window === "undefined") return [];
-  return Object.keys(readMe());
+  const acct = getCurrentAccount();
+  if (!acct) return null;
+  const member = Object.values(snapshot.members).find(
+    (m) => m.campaignId === campaignId && m.accountId === acct.id,
+  );
+  return member?.id ?? null;
 }
 
 // ---- selectors -------------------------------------------------------------
@@ -207,8 +225,12 @@ export function getSession(id: string): Session | undefined {
 }
 
 export function getMyCampaigns(): Campaign[] {
-  if (typeof window === "undefined") return [];
-  const ids = new Set(getKnownCampaignIds());
+  const acct = getCurrentAccount();
+  if (!acct) return [];
+  const ids = new Set<string>();
+  for (const m of Object.values(snapshot.members)) {
+    if (m.accountId === acct.id) ids.add(m.campaignId);
+  }
   return Object.values(snapshot.campaigns)
     .filter((c) => ids.has(c.id))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -220,8 +242,112 @@ export function ensureCampaign(code: string): Promise<void> {
   return backend.ensureCampaign(code);
 }
 
-export function ensureMyCampaigns(): Promise<void> {
-  return backend.ensureMyCampaigns();
+/** Loads the logged-in account's campaigns into the snapshot. */
+export async function ensureAccountCampaigns(): Promise<void> {
+  const acct = getCurrentAccount();
+  if (!acct) return;
+  await backend.ensureAccountCampaigns(acct.id);
+}
+
+// ---- auth (lightweight email + password; see src/lib/auth.ts) --------------
+
+export { getCurrentAccount } from "./auth";
+
+function dbError(e: unknown): string {
+  const msg =
+    e && typeof e === "object" && "message" in e
+      ? String((e as { message?: unknown }).message)
+      : String(e);
+  return `Database error: ${msg || "unknown"}. If using Supabase, check both migrations are applied and the URL/anon key are correct.`;
+}
+
+export async function signUp(
+  input: SignUpInput,
+): Promise<{ account: Account } | { error: string }> {
+  const email = input.email.trim().toLowerCase();
+
+  let existing: Account | null;
+  try {
+    existing = await backend.findAccountByEmail(email);
+  } catch (e) {
+    return { error: dbError(e) };
+  }
+  if (existing) return { error: "An account with that email already exists." };
+
+  const account: Account = {
+    id: randomId(""),
+    email,
+    passwordHash: await hashPassword(email, input.password),
+    displayName: input.displayName.trim(),
+    createdAt: new Date().toISOString(),
+  };
+  // Optimistic: add to the snapshot, then persist to Supabase.
+  api.upsertAccount(account);
+  try {
+    await backend.persistAccount(account);
+  } catch (e) {
+    return { error: dbError(e) };
+  }
+  setCurrentAccount({ id: account.id, email, displayName: account.displayName });
+  touch();
+  return { account };
+}
+
+export async function logIn(
+  input: LogInInput,
+): Promise<{ account: Account } | { error: string }> {
+  const email = input.email.trim().toLowerCase();
+
+  let existing: Account | null;
+  try {
+    existing = await backend.findAccountByEmail(email);
+  } catch (e) {
+    return { error: dbError(e) };
+  }
+  if (!existing) return { error: "No account found for that email." };
+  const hash = await hashPassword(email, input.password);
+  if (hash !== existing.passwordHash) return { error: "Incorrect password." };
+
+  api.upsertAccount(existing);
+  setCurrentAccount({
+    id: existing.id,
+    email: existing.email,
+    displayName: existing.displayName,
+  });
+  try {
+    await ensureAccountCampaigns();
+  } catch {
+    /* non-fatal: campaigns will load on next visit */
+  }
+  touch();
+  return { account: existing };
+}
+
+export function logOut() {
+  clearCurrentAccount();
+  touch();
+}
+
+/**
+ * Drop a stored session whose account doesn't exist in the active backend — e.g.
+ * a session left in localStorage from local-first mode that lingers after env
+ * vars switch the app to Supabase. Without this the app shows you as "logged in"
+ * to a phantom account and never offers sign-up. A network error is treated as
+ * "unknown" (session kept) so a transient blip never logs you out.
+ */
+export async function verifySession(): Promise<void> {
+  const acct = getCurrentAccount();
+  if (!acct) return;
+  let found: Account | null;
+  try {
+    found = await backend.findAccountByEmail(acct.email);
+  } catch {
+    return;
+  }
+  if (!found || found.id !== acct.id) {
+    clearCurrentAccount();
+    touch();
+  }
 }
 
 // ---- mutations (optimistic + backend persistence) --------------------------
@@ -235,11 +361,13 @@ export function createCampaign(input: CreateCampaignInput): {
   const campaignId = randomId("");
   const hostId = randomId("");
   const roundId = randomId("");
+  const acct = getCurrentAccount();
 
   const host: CampaignMember = {
     id: hostId,
     campaignId,
-    guestName: input.hostName,
+    guestName: acct?.displayName ?? input.hostName,
+    accountId: acct?.id ?? null,
     role: "dm",
     color: pickColor(0),
     joinedAt: now,
@@ -252,7 +380,11 @@ export function createCampaign(input: CreateCampaignInput): {
     hostId,
     inviteCode: inviteCode(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    settings: { weights: DEFAULT_WEIGHTS, timeSlots: input.timeSlots },
+    settings: {
+      weights: DEFAULT_WEIGHTS,
+      timeSlots: [...TIME_SLOTS],
+      minPlayers: input.minPlayers,
+    },
     archivedAt: null,
     createdAt: now,
   };
@@ -260,9 +392,9 @@ export function createCampaign(input: CreateCampaignInput): {
   const round: SchedulingRound = {
     id: roundId,
     campaignId,
-    title: "This week",
-    dates: input.dates,
-    timeSlots: input.timeSlots,
+    title: "Availability",
+    dates: rollingDates(),
+    timeSlots: [...TIME_SLOTS],
     status: "active",
     createdAt: now,
   };
@@ -270,9 +402,20 @@ export function createCampaign(input: CreateCampaignInput): {
   api.upsertCampaign(campaign);
   api.upsertMember(host);
   api.upsertRound(round);
-  setMyMemberId(campaignId, hostId);
   void backend.persistCreateCampaign(campaign, host, round);
   return { campaign, host, round };
+}
+
+/** DM-only: change the minimum players (excluding the DM) for a viable session. */
+export function updateMinPlayers(campaignId: string, minPlayers: number) {
+  const campaign = snapshot.campaigns[campaignId];
+  if (!campaign) return;
+  const updated: Campaign = {
+    ...campaign,
+    settings: { ...campaign.settings, minPlayers },
+  };
+  api.upsertCampaign(updated);
+  void backend.persistUpdateCampaign(updated);
 }
 
 export function joinAsGuest(
@@ -286,16 +429,17 @@ export function joinAsGuest(
   const now = new Date().toISOString();
   const id = randomId("");
   const count = getMembers(campaignId).length;
+  const acct = getCurrentAccount();
   const member: CampaignMember = {
     id,
     campaignId,
     guestName: name,
+    accountId: acct?.id ?? null,
     role: "player",
     color: pickColor(count),
     joinedAt: now,
   };
   api.upsertMember(member);
-  setMyMemberId(campaignId, id);
   void backend.persistJoinMember(member);
   return member;
 }
@@ -366,11 +510,7 @@ export function confirmSession(
 /** Test/demo helper: wipe everything. */
 export function resetStore() {
   snapshot = EMPTY_DB;
-  try {
-    localStorage.removeItem(ME_KEY);
-  } catch {
-    /* ignore */
-  }
+  clearCurrentAccount();
   backend.reset();
   emit();
 }

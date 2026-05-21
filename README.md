@@ -1,11 +1,12 @@
 # Council — D&D Session Planner
 
-Find the night your whole party can actually play. Drop in candidate dates, let
-everyone tap their availability, and Council instantly surfaces the **best
-session time**. A mobile-first mix of When2Meet + Doodle, with a subtle
+Find the night your whole party can actually play. Everyone taps their
+availability across the next few weeks and Council instantly surfaces the
+**best session time**. A mobile-first mix of When2Meet + Doodle, with a subtle
 dark-fantasy look.
 
-> A small, free app for you and your friends. No accounts, no paywall.
+> A small, free app for you and your friends. A lightweight email/password
+> login (no paywall, no OAuth) so your campaigns follow you.
 > One codebase → web (and iOS/Android later via Capacitor).
 
 ---
@@ -19,26 +20,32 @@ npm test         # scoring unit tests
 npm run build    # static export to ./out
 ```
 
-With no setup the app runs **local-first** (campaigns live in your browser and
-sync across tabs) — great for trying it out on one device. To let friends join
-from **their own phones**, point it at a free Supabase project (below).
+Council stores everything in a free Supabase project so your party can join from
+**their own phones**, with availability syncing in realtime. Setup takes a couple
+of minutes (below) — without Supabase env vars the app shows a setup notice
+instead of running.
 
 ---
 
 ## How people use it
 
-1. Open `/`, **Create a campaign**, pick a few dates, create it.
+1. Sign in with an **email + password**, then **Create a campaign** (name it,
+   set the minimum players for a session). Dates fill in automatically — the
+   next ~5 weeks × morning/afternoon/evening.
 2. Hit the **share** icon → send the invite link to your party.
-3. Everyone opens the link, joins with a **name** (no login), and taps their
-   availability. The grid and the Best/Backup recommendation update **live**.
+3. Everyone opens the link, signs in, **joins**, and marks their availability
+   (tap to cycle, or **hold & drag** to paint). The grid and the Best/Backup
+   recommendation update **live**. A ✓ marks days with enough players free.
 4. As the DM, press **Confirm** on a recommendation to book the session.
 
-There are no accounts. The invite link is the key — anyone with it can view and
-edit that campaign, like When2Meet or Doodle.
+Login is intentionally lightweight — it just ties a person to their campaigns
+(passwords are hashed, but there's no email verification or OAuth). The invite
+code still gates access to a campaign, like When2Meet or Doodle; don't store
+sensitive data here.
 
 ---
 
-## Make it shared & free (Supabase)
+## Set up Supabase (required)
 
 The free tier is plenty for a gaming group. No credit card, no Edge Functions,
 no OAuth.
@@ -50,8 +57,9 @@ no OAuth.
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
    ```
-2. Open the Supabase **SQL editor**, paste the contents of
-   `supabase/migrations/0001_init.sql`, and run it. (Or `supabase db push`.)
+2. Open the Supabase **SQL editor** and run the migrations in order:
+   `supabase/migrations/0001_init.sql`, then `supabase/migrations/0002_accounts.sql`
+   (the latter adds the login `accounts` table). (Or `supabase db push`.)
 3. Restart `npm run dev`. The app auto-detects the env vars and stores everything
    in Supabase, with second devices updating in realtime.
 
@@ -93,7 +101,7 @@ src/
   lib/
     core/                  # framework-agnostic: types, zod schemas, scoring ★
     store.ts               # in-memory store + optimistic mutations
-    backends/              # LocalBackend (localStorage) / SupabaseBackend
+    backends/              # SupabaseBackend (Postgres + Realtime)
     supabase/              # anon client + row<->domain mappers
     hooks.ts               # React bindings (useCampaign, useScores, …)
 supabase/
@@ -112,10 +120,11 @@ heat      = available / members        → heatmap intensity
 
 `recommend()` returns **Best**, **Good backup** (different date), and **Avoid**.
 
-**Backends are swappable** behind one interface (`src/lib/backends/`): with no
-env vars the `LocalBackend` (localStorage + BroadcastChannel) runs; with Supabase
-env vars the `SupabaseBackend` (Postgres + Realtime) takes over. The UI never
-changes.
+**Storage** lives behind one interface (`src/lib/backends/`): the
+`SupabaseBackend` (Postgres + Realtime via the anon client) is the single source
+of truth. Supabase env vars are required — without them the app shows a setup
+notice instead of running. The only data kept on the device is the login session
+and theme preference (localStorage).
 
 **Routing note:** runtime IDs use query params (`/plan/?code=ABC123`) so the app
 is a clean static export that runs the same on the web and inside Capacitor.

@@ -65,3 +65,9 @@ export function addDaysISO(iso: string, days: number): string {
 export function nextNDays(n: number, start = todayISO()): string[] {
   return Array.from({ length: n }, (_, i) => addDaysISO(start, i));
 }
+
+// Rolling availability window: today → today + (days-1). ~5 weeks by default so
+// the planner always shows at least a month ahead and never expires.
+export function rollingDates(days = 35, start = todayISO()): string[] {
+  return nextNDays(days, start);
+}

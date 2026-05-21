@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Share2, Sparkles, CalendarCheck } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { AuthGate } from "@/components/auth/auth-gate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input, Textarea } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { AvailabilityGrid } from "@/components/availability/availability-grid";
 import { StatusChip } from "@/components/availability/status";
@@ -16,6 +17,7 @@ import { InviteSheet } from "@/components/campaign/invite-sheet";
 import { MemberAvatar } from "@/components/campaign/member-list";
 import {
   useCampaign,
+  useCurrentAccount,
   useEnsureCampaign,
   useMounted,
   useScores,
@@ -34,11 +36,11 @@ function PlanInner() {
   const code = useSearchParams().get("code") ?? "";
   const router = useRouter();
   const mounted = useMounted();
+  const account = useCurrentAccount();
   const loading = useEnsureCampaign(code);
   const bundle = useCampaign(code);
   const model = useScores(bundle);
   const [invite, setInvite] = React.useState(false);
-  const [name, setName] = React.useState("");
   const [confirmSlot, setConfirmSlot] = React.useState<SlotScore | null>(null);
   const [notes, setNotes] = React.useState("");
 
@@ -61,27 +63,20 @@ function PlanInner() {
       <AppShell title={campaign.name} back={`/campaign/?code=${code}`}>
         <Card className="border-primary/50">
           <CardContent className="pt-4">
-            <div className="mb-2 font-medium">Add your name to start marking</div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === "Enter" &&
-                  name.trim() &&
-                  joinAsGuest(campaign.id, name.trim())
-                }
-                autoFocus
-              />
-              <Button
-                onClick={() =>
-                  name.trim() && joinAsGuest(campaign.id, name.trim())
-                }
-              >
-                Join
-              </Button>
-            </div>
+            <div className="mb-2 font-medium">Join to start marking</div>
+            <p className="mb-3 text-sm text-muted-foreground">
+              You&apos;ll join as{" "}
+              <span className="font-medium text-foreground">
+                {account?.displayName}
+              </span>
+              .
+            </p>
+            <Button
+              className="w-full"
+              onClick={() => account && joinAsGuest(campaign.id, account.displayName)}
+            >
+              Join campaign
+            </Button>
           </CardContent>
         </Card>
       </AppShell>
@@ -171,7 +166,9 @@ function PlanInner() {
 
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-border/60 bg-card/40 px-3 py-2 text-xs">
-          <span className="text-muted-foreground">Tap a cell to cycle:</span>
+          <span className="text-muted-foreground">
+            Tap to cycle · hold &amp; drag to paint:
+          </span>
           <StatusChip status="available" className="text-xs" />
           <StatusChip status="maybe" className="text-xs" />
           <StatusChip status="unavailable" className="text-xs" />
@@ -189,7 +186,10 @@ function PlanInner() {
         />
 
         <p className="text-center text-xs text-muted-foreground">
-          Numbers show players available (+maybe). The crown marks the best slot.
+          Numbers show players available (+maybe). A check marks days with at
+          least {campaign.settings.minPlayers} player
+          {campaign.settings.minPlayers === 1 ? "" : "s"} free; the crown marks
+          the best slot.
           {!isDM && " The DM confirms the final session."}
         </p>
       </div>
@@ -239,7 +239,9 @@ function PlanInner() {
 export default function PlanPage() {
   return (
     <React.Suspense fallback={<AppShell title="Planner" back="/" />}>
-      <PlanInner />
+      <AuthGate>
+        <PlanInner />
+      </AuthGate>
     </React.Suspense>
   );
 }

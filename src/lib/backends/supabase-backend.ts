@@ -1,6 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabase } from "../supabase/client";
 import {
+  Account,
   Campaign,
   CampaignMember,
   AvailabilityEntry,
@@ -9,10 +10,12 @@ import {
 } from "../core/types";
 import {
   MEMBER_COLUMNS,
+  accountToRow,
   campaignToRow,
   entryToRow,
   memberToRow,
   roundToRow,
+  rowToAccount,
   rowToCampaign,
   rowToEntry,
   rowToMember,
@@ -21,6 +24,19 @@ import {
   sessionToRow,
 } from "../supabase/mappers";
 import { Backend, StoreApi } from "./types";
+
+/**
+ * Surface Supabase errors instead of silently swallowing them. Logs to the
+ * console (so failed writes are visible) and throws so callers that care
+ * (sign-up / log-in) can report it to the user.
+ */
+function check(label: string, error: { message?: string } | null): void {
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.error(`[supabase] ${label}:`, error.message ?? error);
+    throw error;
+  }
+}
 
 /**
  * Supabase backend: Postgres source of truth + Realtime reconciliation.
@@ -84,10 +100,16 @@ export class SupabaseBackend implements Backend {
     this.subscribeCampaign(campaign.id, round?.id);
   }
 
-  async ensureMyCampaigns() {
+  async ensureAccountCampaigns(accountId: string) {
     const sb = this.sb;
-    if (!sb) return;
-    const ids = this.api.getKnownCampaignIds();
+    if (!sb || !accountId) return;
+    const { data: myMembers } = await sb
+      .from("campaign_members")
+      .select("campaign_id")
+      .eq("account_id", accountId);
+    const ids = Array.from(
+      new Set((myMembers ?? []).map((m: { campaign_id: string }) => m.campaign_id)),
+    );
     if (ids.length === 0) return;
 
     const [{ data: campaigns }, { data: members }, { data: sessions }] =
@@ -99,6 +121,27 @@ export class SupabaseBackend implements Backend {
     campaigns?.forEach((c) => this.api.upsertCampaign(rowToCampaign(c)));
     members?.forEach((m) => this.api.upsertMember(rowToMember(m)));
     sessions?.forEach((s) => this.api.upsertSession(rowToSession(s)));
+  }
+
+  // ---- accounts ------------------------------------------------------------
+
+  async findAccountByEmail(email: string): Promise<Account | null> {
+    const sb = this.sb;
+    if (!sb) return null;
+    const { data, error } = await sb
+      .from("accounts")
+      .select("*")
+      .eq("email", email.trim().toLowerCase())
+      .maybeSingle();
+    check("findAccountByEmail", error);
+    return data ? rowToAccount(data) : null;
+  }
+
+  async persistAccount(account: Account) {
+    const sb = this.sb;
+    if (!sb) return;
+    const { error } = await sb.from("accounts").upsert(accountToRow(account));
+    check("persistAccount", error);
   }
 
   // ---- realtime ------------------------------------------------------------
@@ -142,31 +185,59 @@ export class SupabaseBackend implements Backend {
   ) {
     const sb = this.sb;
     if (!sb) return;
-    await sb.from("campaigns").insert(campaignToRow(campaign));
-    await sb.from("campaign_members").insert(memberToRow(host));
-    await sb.from("scheduling_rounds").insert(roundToRow(round));
+    check(
+      "insert campaign",
+      (await sb.from("campaigns").insert(campaignToRow(campaign))).error,
+    );
+    check(
+      "insert host member",
+      (await sb.from("campaign_members").insert(memberToRow(host))).error,
+    );
+    check(
+      "insert round",
+      (await sb.from("scheduling_rounds").insert(roundToRow(round))).error,
+    );
     this.subscribeCampaign(campaign.id, round.id);
+  }
+
+  async persistUpdateCampaign(campaign: Campaign) {
+    const sb = this.sb;
+    if (!sb) return;
+    const { error } = await sb
+      .from("campaigns")
+      .update({
+        name: campaign.name,
+        description: campaign.description ?? null,
+        settings: campaign.settings,
+      })
+      .eq("id", campaign.id);
+    check("update campaign", error);
   }
 
   async persistJoinMember(member: CampaignMember) {
     const sb = this.sb;
     if (!sb) return;
-    await sb.from("campaign_members").insert(memberToRow(member));
+    const { error } = await sb
+      .from("campaign_members")
+      .insert(memberToRow(member));
+    check("insert member", error);
     this.subscribeCampaign(member.campaignId);
   }
 
   async persistSetAvailability(entry: AvailabilityEntry) {
     const sb = this.sb;
     if (!sb) return;
-    await sb
+    const { error } = await sb
       .from("availability_entries")
       .upsert(entryToRow(entry), { onConflict: "round_id,member_id,date,time_slot" });
+    check("upsert availability", error);
   }
 
   async persistConfirmSession(session: Session) {
     const sb = this.sb;
     if (!sb) return;
-    await sb.from("sessions").insert(sessionToRow(session));
+    const { error } = await sb.from("sessions").insert(sessionToRow(session));
+    check("insert session", error);
   }
 
   reset() {
