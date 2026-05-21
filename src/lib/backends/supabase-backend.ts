@@ -214,6 +214,15 @@ export class SupabaseBackend implements Backend {
     check("update campaign", error);
   }
 
+  async persistDeleteCampaign(campaignId: string) {
+    const sb = this.sb;
+    if (!sb) return;
+    // Child rows (members, rounds, availability, sessions) cascade on delete.
+    const { error } = await sb.from("campaigns").delete().eq("id", campaignId);
+    check("delete campaign", error);
+    this.subscribed.delete(campaignId);
+  }
+
   async persistJoinMember(member: CampaignMember) {
     const sb = this.sb;
     if (!sb) return;
@@ -231,6 +240,17 @@ export class SupabaseBackend implements Backend {
       .from("availability_entries")
       .upsert(entryToRow(entry), { onConflict: "round_id,member_id,date,time_slot" });
     check("upsert availability", error);
+  }
+
+  async persistSetAvailabilityBulk(entries: AvailabilityEntry[]) {
+    const sb = this.sb;
+    if (!sb || entries.length === 0) return;
+    const { error } = await sb
+      .from("availability_entries")
+      .upsert(entries.map(entryToRow), {
+        onConflict: "round_id,member_id,date,time_slot",
+      });
+    check("bulk upsert availability", error);
   }
 
   async persistConfirmSession(session: Session) {

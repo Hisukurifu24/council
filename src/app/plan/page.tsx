@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { AvailabilityGrid } from "@/components/availability/availability-grid";
+import { BulkMark } from "@/components/availability/bulk-mark";
 import { StatusChip } from "@/components/availability/status";
 import { RecommendationCard } from "@/components/scoring/recommendation-card";
 import { InviteSheet } from "@/components/campaign/invite-sheet";
@@ -23,7 +24,12 @@ import {
   useScores,
   statusFor,
 } from "@/lib/hooks";
-import { confirmSession, joinAsGuest, setAvailability } from "@/lib/store";
+import {
+  confirmSession,
+  joinAsGuest,
+  setAvailability,
+  setAvailabilityBulk,
+} from "@/lib/store";
 import {
   AvailabilityStatus,
   TIME_SLOT_LABELS,
@@ -86,6 +92,14 @@ function PlanInner() {
   const onSet = (date: string, slot: TimeSlot, status: AvailabilityStatus) => {
     if (!myMemberId) return;
     setAvailability(round.id, myMemberId, date, slot, status);
+  };
+
+  const onBulk = (
+    cells: { date: string; timeSlot: TimeSlot }[],
+    status: AvailabilityStatus,
+  ) => {
+    if (!myMemberId) return;
+    setAvailabilityBulk(round.id, myMemberId, cells, status);
   };
 
   const openConfirm = (slot: SlotScore) => {
@@ -173,6 +187,9 @@ function PlanInner() {
           <StatusChip status="maybe" className="text-xs" />
           <StatusChip status="unavailable" className="text-xs" />
         </div>
+
+        {/* Bulk marking */}
+        {myMemberId && <BulkMark round={round} onApply={onBulk} />}
 
         {/* The grid */}
         <AvailabilityGrid

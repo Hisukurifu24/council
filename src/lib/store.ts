@@ -130,6 +130,34 @@ const api: StoreApi = {
     snapshot = { ...snapshot, members };
     emit();
   },
+  removeCampaign: (id) => {
+    const campaigns = { ...snapshot.campaigns };
+    delete campaigns[id];
+
+    const roundIds = new Set<string>();
+    const rounds = { ...snapshot.rounds };
+    for (const [rid, r] of Object.entries(rounds)) {
+      if (r.campaignId === id) {
+        roundIds.add(rid);
+        delete rounds[rid];
+      }
+    }
+    const members = { ...snapshot.members };
+    for (const [mid, m] of Object.entries(members)) {
+      if (m.campaignId === id) delete members[mid];
+    }
+    const sessions = { ...snapshot.sessions };
+    for (const [sid, s] of Object.entries(sessions)) {
+      if (s.campaignId === id) delete sessions[sid];
+    }
+    const availability = { ...snapshot.availability };
+    for (const [key, e] of Object.entries(availability)) {
+      if (roundIds.has(e.roundId)) delete availability[key];
+    }
+
+    snapshot = { ...snapshot, campaigns, rounds, members, sessions, availability };
+    emit();
+  },
 };
 
 /**
@@ -418,6 +446,24 @@ export function updateMinPlayers(campaignId: string, minPlayers: number) {
   void backend.persistUpdateCampaign(updated);
 }
 
+/** DM-only: rename the campaign. */
+export function renameCampaign(campaignId: string, name: string) {
+  const campaign = snapshot.campaigns[campaignId];
+  if (!campaign) return;
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === campaign.name) return;
+  const updated: Campaign = { ...campaign, name: trimmed };
+  api.upsertCampaign(updated);
+  void backend.persistUpdateCampaign(updated);
+}
+
+/** DM-only: delete the campaign and all of its data (members, rounds, sessions). */
+export function deleteCampaign(campaignId: string) {
+  if (!snapshot.campaigns[campaignId]) return;
+  api.removeCampaign(campaignId);
+  void backend.persistDeleteCampaign(campaignId);
+}
+
 export function joinAsGuest(
   campaignId: string,
   name: string,
@@ -465,6 +511,39 @@ export function setAvailability(
   api.upsertAvailability(entry);
   const member = snapshot.members[memberId];
   void backend.persistSetAvailability(entry, member);
+}
+
+/**
+ * Mark many cells at once (the "Mark all" tool). Updates the snapshot a single
+ * time and pushes one batched upsert, rather than firing a write per cell.
+ */
+export function setAvailabilityBulk(
+  roundId: string,
+  memberId: string,
+  cells: { date: string; timeSlot: TimeSlot }[],
+  status: AvailabilityStatus,
+): void {
+  if (cells.length === 0) return;
+  const now = new Date().toISOString();
+  const availability = { ...snapshot.availability };
+  const entries: AvailabilityEntry[] = [];
+  for (const { date, timeSlot } of cells) {
+    const key = avKey(roundId, memberId, date, timeSlot);
+    const entry: AvailabilityEntry = {
+      id: availability[key]?.id ?? randomId(""),
+      roundId,
+      memberId,
+      date,
+      timeSlot,
+      status,
+      updatedAt: now,
+    };
+    availability[key] = entry;
+    entries.push(entry);
+  }
+  snapshot = { ...snapshot, availability };
+  emit();
+  void backend.persistSetAvailabilityBulk(entries);
 }
 
 /** Cycle a cell's status: available -> maybe -> unavailable -> available. */

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   Share2,
@@ -11,12 +11,16 @@ import {
   Minus,
   Plus,
   Users,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthGate } from "@/components/auth/auth-gate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Modal } from "@/components/ui/modal";
+import { Input, Label } from "@/components/ui/input";
 import { MemberList } from "@/components/campaign/member-list";
 import { InviteSheet } from "@/components/campaign/invite-sheet";
 import {
@@ -25,17 +29,26 @@ import {
   useEnsureCampaign,
   useMounted,
 } from "@/lib/hooks";
-import { joinAsGuest, updateMinPlayers } from "@/lib/store";
+import {
+  deleteCampaign,
+  joinAsGuest,
+  renameCampaign,
+  updateMinPlayers,
+} from "@/lib/store";
 import { TIME_SLOT_LABELS } from "@/lib/core/types";
 import { formatDateLabel } from "@/lib/utils";
 
 function CampaignInner() {
   const code = useSearchParams().get("code") ?? "";
+  const router = useRouter();
   const mounted = useMounted();
   const account = useCurrentAccount();
   const loading = useEnsureCampaign(code);
   const bundle = useCampaign(code);
   const [invite, setInvite] = React.useState(false);
+  const [renaming, setRenaming] = React.useState(false);
+  const [nameDraft, setNameDraft] = React.useState("");
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const { campaign, members, round, sessions, myMemberId } = bundle;
 
@@ -62,6 +75,22 @@ function CampaignInner() {
   const join = () => {
     if (!account) return;
     joinAsGuest(campaign.id, account.displayName);
+  };
+
+  const openRename = () => {
+    setNameDraft(campaign.name);
+    setRenaming(true);
+  };
+
+  const saveRename = () => {
+    renameCampaign(campaign.id, nameDraft);
+    setRenaming(false);
+  };
+
+  const doDelete = () => {
+    deleteCampaign(campaign.id);
+    setConfirmDelete(false);
+    router.push("/dashboard");
   };
 
   const confirmed = sessions.filter((s) => s.status === "confirmed");
@@ -156,6 +185,26 @@ function CampaignInner() {
           </Card>
         )}
 
+        {/* DM: rename the campaign */}
+        {myMemberId && isDM && (
+          <Card>
+            <CardContent className="flex items-center justify-between pt-4">
+              <div className="min-w-0 pr-3">
+                <div className="flex items-center gap-2 font-medium">
+                  <Pencil className="h-4 w-4 text-primary" />
+                  Campaign name
+                </div>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {campaign.name}
+                </p>
+              </div>
+              <Button variant="outline" onClick={openRename}>
+                Rename
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Primary CTA */}
         {myMemberId && (
           <Link href={`/plan/?code=${campaign.inviteCode}`}>
@@ -221,6 +270,28 @@ function CampaignInner() {
             myMemberId={myMemberId}
           />
         </section>
+
+        {/* DM: delete the campaign */}
+        {myMemberId && isDM && (
+          <Card className="border-destructive/40">
+            <CardContent className="flex items-center justify-between pt-4">
+              <div className="pr-3">
+                <div className="font-medium">Delete campaign</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Permanently removes this campaign and everyone&apos;s
+                  availability. This can&apos;t be undone.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <InviteSheet
@@ -229,6 +300,64 @@ function CampaignInner() {
         code={campaign.inviteCode}
         campaignName={campaign.name}
       />
+
+      <Modal
+        open={renaming}
+        onClose={() => setRenaming(false)}
+        title="Rename campaign"
+      >
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="campaign-name">Campaign name</Label>
+            <Input
+              id="campaign-name"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              maxLength={80}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveRename();
+              }}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              onClick={saveRename}
+              disabled={!nameDraft.trim()}
+            >
+              Save
+            </Button>
+            <Button variant="ghost" onClick={() => setRenaming(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete campaign?"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            This permanently deletes{" "}
+            <span className="font-medium text-foreground">{campaign.name}</span>{" "}
+            and all of its availability and booked sessions for everyone. This
+            can&apos;t be undone.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="destructive" className="flex-1" onClick={doDelete}>
+              <Trash2 className="h-4 w-4" />
+              Delete campaign
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </AppShell>
   );
 }

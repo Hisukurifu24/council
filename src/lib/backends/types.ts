@@ -19,6 +19,7 @@ export interface StoreApi {
   upsertAvailability(e: AvailabilityEntry): void;
   upsertSession(s: Session): void;
   removeMember(id: string): void;
+  removeCampaign(id: string): void;
 }
 
 /**
@@ -42,11 +43,13 @@ export interface Backend {
     round: SchedulingRound,
   ): Promise<void>;
   persistUpdateCampaign(campaign: Campaign): Promise<void>;
+  persistDeleteCampaign(campaignId: string): Promise<void>;
   persistJoinMember(member: CampaignMember): Promise<void>;
   persistSetAvailability(
     entry: AvailabilityEntry,
     member: CampaignMember | undefined,
   ): Promise<void>;
+  persistSetAvailabilityBulk(entries: AvailabilityEntry[]): Promise<void>;
   persistConfirmSession(
     session: Session,
     dm: CampaignMember | undefined,
