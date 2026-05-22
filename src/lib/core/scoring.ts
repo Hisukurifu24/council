@@ -25,7 +25,7 @@ export interface SlotScore {
   dmOk: boolean; // true if the DM is available/maybe for this slot (or there is no DM)
 }
 
-export type RecommendationKind = "best" | "backup" | "avoid";
+export type RecommendationKind = "best" | "backup";
 
 export interface Recommendation {
   kind: RecommendationKind;
@@ -142,11 +142,9 @@ export function isViable(slot: SlotScore, minPlayers: number): boolean {
 }
 
 /**
- * Produce Best / Backup / Avoid recommendations.
+ * Produce Best / Backup recommendations.
  * - best: top-ranked slot meeting the minPlayers threshold (excluding the DM).
  * - backup: next-ranked viable slot on a *different date* where possible.
- * - avoid: a slot with a negative score or a majority unavailable (only if it
- *   is meaningfully bad and distinct from best/backup).
  *
  * Slots where the DM is not available/maybe (`!dmOk`) are excluded entirely:
  * if the DM can't make it, the session can't happen.
@@ -168,14 +166,6 @@ export function recommend(
       (s) => s !== best && s.date !== best.date && isViable(s, minPlayers),
     ) ?? ranked.find((s) => s !== best && isViable(s, minPlayers));
   if (backup) out.push({ kind: "backup", slot: backup });
-
-  // Worst slot: lowest score. Only surface as "avoid" if it is genuinely bad.
-  const worst = ranked[ranked.length - 1];
-  const isUsed = worst === best || worst === backup;
-  const isBad = worst.score < 0 || worst.unavailable > worst.available;
-  if (!isUsed && isBad && worst.unavailable > 0) {
-    out.push({ kind: "avoid", slot: worst });
-  }
 
   return out;
 }

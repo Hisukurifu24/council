@@ -8,7 +8,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MemberAvatar } from "@/components/campaign/member-list";
+import { VoterBreakdown } from "@/components/availability/voter-breakdown";
 import { useCampaign, useEnsureCampaign, useMounted } from "@/lib/hooks";
 import { cancelSession, getSession } from "@/lib/store";
 import { TIME_SLOT_LABELS } from "@/lib/core/types";
@@ -45,16 +45,6 @@ function SessionInner() {
   };
 
   const { weekday, day } = formatDateLabel(session.date);
-  // who is available for this slot
-  const present = bundle.members.filter((m) =>
-    bundle.entries.some(
-      (e) =>
-        e.memberId === m.id &&
-        e.date === session.date &&
-        e.timeSlot === session.timeSlot &&
-        (e.status === "available" || e.status === "maybe"),
-    ),
-  );
 
   return (
     <AppShell title={bundle.campaign.name} back={`/campaign/?code=${code}`}>
@@ -91,20 +81,16 @@ function SessionInner() {
         </Card>
 
         <section>
-          <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
-            <Users className="h-4 w-4" /> Expected ({present.length})
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
+            <Users className="h-4 w-4" /> Who voted what
           </h2>
-          <div className="flex flex-wrap gap-2">
-            {present.map((m) => (
-              <div
-                key={m.id}
-                className="flex items-center gap-2 rounded-full border border-border/60 bg-card/50 py-1 pl-1 pr-3"
-              >
-                <MemberAvatar member={m} className="h-6 w-6 text-[10px]" />
-                <span className="text-sm">{m.guestName}</span>
-              </div>
-            ))}
-          </div>
+          <VoterBreakdown
+            members={bundle.members}
+            entries={bundle.entries}
+            date={session.date}
+            timeSlot={session.timeSlot}
+            hostId={bundle.campaign.hostId}
+          />
         </section>
 
         <Link href={`/plan/?code=${code}`}>

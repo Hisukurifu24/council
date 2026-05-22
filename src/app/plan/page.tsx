@@ -10,10 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-import { AvailabilityGrid } from "@/components/availability/availability-grid";
+import {
+  AvailabilityGrid,
+  type CellVoter,
+} from "@/components/availability/availability-grid";
 import { BulkMark } from "@/components/availability/bulk-mark";
 import { VoiceMark } from "@/components/availability/voice-mark";
 import { StatusChip } from "@/components/availability/status";
+import { VoterBreakdown } from "@/components/availability/voter-breakdown";
 import { RecommendationCard } from "@/components/scoring/recommendation-card";
 import { InviteSheet } from "@/components/campaign/invite-sheet";
 import { MemberAvatar } from "@/components/campaign/member-list";
@@ -35,6 +39,7 @@ import {
   AvailabilityStatus,
   TIME_SLOT_LABELS,
   TimeSlot,
+  slotKeyId,
 } from "@/lib/core/types";
 import { SlotScore } from "@/lib/core/scoring";
 import { formatDateLabel, isSlotPast, todayISO } from "@/lib/utils";
@@ -50,8 +55,27 @@ function PlanInner() {
   const [invite, setInvite] = React.useState(false);
   const [confirmSlot, setConfirmSlot] = React.useState<SlotScore | null>(null);
   const [notes, setNotes] = React.useState("");
+  const [votersSlot, setVotersSlot] = React.useState<{
+    date: string;
+    timeSlot: TimeSlot;
+  } | null>(null);
 
   const { campaign, round, members, entries, myMemberId } = bundle;
+
+  const votersByCell = React.useMemo(() => {
+    const map = new Map<string, CellVoter[]>();
+    const byId = new Map(members.map((m) => [m.id, m] as const));
+    for (const e of entries) {
+      const m = byId.get(e.memberId);
+      if (!m) continue;
+      const key = slotKeyId(e.date, e.timeSlot);
+      const voter: CellVoter = { id: m.id, color: m.color, status: e.status };
+      const arr = map.get(key);
+      if (arr) arr.push(voter);
+      else map.set(key, [voter]);
+    }
+    return map;
+  }, [members, entries]);
 
   if (mounted && !loading && !campaign) {
     return (
@@ -207,6 +231,10 @@ function PlanInner() {
           }
           onSet={onSet}
           isPast={isSlotPast}
+          voters={votersByCell}
+          onShowVoters={(date, slot) =>
+            setVotersSlot({ date, timeSlot: slot })
+          }
         />
 
         <p className="text-center text-xs text-muted-foreground">
@@ -247,6 +275,29 @@ function PlanInner() {
               Confirm session
             </Button>
           </div>
+        )}
+      </Modal>
+
+      {/* Who voted what for a slot */}
+      <Modal
+        open={!!votersSlot}
+        onClose={() => setVotersSlot(null)}
+        title={
+          votersSlot
+            ? `${formatDateLabel(votersSlot.date).weekday} ${
+                formatDateLabel(votersSlot.date).day
+              } · ${TIME_SLOT_LABELS[votersSlot.timeSlot]}`
+            : undefined
+        }
+      >
+        {votersSlot && (
+          <VoterBreakdown
+            members={members}
+            entries={entries}
+            date={votersSlot.date}
+            timeSlot={votersSlot.timeSlot}
+            hostId={campaign.hostId}
+          />
         )}
       </Modal>
 

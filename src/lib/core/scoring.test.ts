@@ -153,23 +153,6 @@ describe("recommend", () => {
     expect(backup.slot.date).toBe("2026-05-23");
   });
 
-  it("flags an avoid slot when one is clearly bad", () => {
-    const members = [member("a"), member("b"), member("c")];
-    const entries = [
-      entry("a", "2026-05-22", "evening", "available"),
-      entry("b", "2026-05-22", "evening", "available"),
-      entry("c", "2026-05-22", "evening", "available"),
-      // a clearly bad slot: everyone unavailable
-      entry("a", "2026-05-23", "morning", "unavailable"),
-      entry("b", "2026-05-23", "morning", "unavailable"),
-      entry("c", "2026-05-23", "morning", "unavailable"),
-    ];
-    const recs = recommend(scoreRound({ round, members, entries }));
-    const avoid = recs.find((r) => r.kind === "avoid");
-    expect(avoid).toBeTruthy();
-    expect(avoid!.slot.unavailable).toBe(3);
-  });
-
   it("returns nothing when there are no members", () => {
     expect(recommend(scoreRound({ round, members: [], entries: [] }))).toEqual(
       [],

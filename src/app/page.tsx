@@ -73,7 +73,7 @@ export default function LandingPage() {
         <div className="mt-14 grid gap-3 sm:grid-cols-3">
           {[
             { Icon: Zap, t: "Instant", d: "Tap to mark a slot. Scores update live across every device." },
-            { Icon: Sparkles, t: "Smart", d: "Best / backup / avoid picks computed from real attendance." },
+            { Icon: Sparkles, t: "Smart", d: "Best / backup picks computed from real attendance." },
             { Icon: Users, t: "Frictionless", d: "Share a link or QR. Players sign in and start tapping." },
           ].map(({ Icon, t, d }) => (
             <div

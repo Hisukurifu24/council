@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown, Star, TriangleAlert, CalendarCheck } from "lucide-react";
+import { Crown, Star, CalendarCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import { Recommendation } from "@/lib/core/scoring";
 import { TIME_SLOT_LABELS } from "@/lib/core/types";
@@ -21,13 +21,6 @@ const META = {
     ring: "ring-accent/60",
     text: "text-accent",
     bg: "bg-accent/10",
-  },
-  avoid: {
-    label: "Avoid this slot",
-    Icon: TriangleAlert,
-    ring: "ring-destructive/50",
-    text: "text-destructive",
-    bg: "bg-destructive/10",
   },
 } as const;
 
@@ -68,7 +61,7 @@ export function RecommendationCard({
           {rec.slot.potential}/{rec.slot.total}
         </div>
       </div>
-      {rec.kind !== "avoid" && canConfirm && onConfirm && (
+      {canConfirm && onConfirm && (
         <Button size="sm" variant={rec.kind === "best" ? "default" : "outline"} onClick={onConfirm}>
           <CalendarCheck className="h-4 w-4" />
           Confirm

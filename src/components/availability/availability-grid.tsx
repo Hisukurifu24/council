@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Crown, Star } from "lucide-react";
+import { Check, Crown, Star, Users } from "lucide-react";
 import {
   AvailabilityStatus,
   SchedulingRound,
@@ -15,6 +15,12 @@ import { heatToIntensity } from "@/lib/core/scoring";
 import { cn, formatDateLabel } from "@/lib/utils";
 import { StatusGlyph } from "./status";
 
+export interface CellVoter {
+  id: string;
+  color: string;
+  status: AvailabilityStatus;
+}
+
 interface Props {
   round: SchedulingRound;
   model: ScoreModel;
@@ -22,6 +28,67 @@ interface Props {
   onSet: (date: string, slot: TimeSlot, status: AvailabilityStatus) => void;
   canEdit: boolean;
   isPast?: (date: string, slot: TimeSlot) => boolean;
+  onShowVoters?: (date: string, slot: TimeSlot) => void;
+  voters?: Map<string, CellVoter[]>;
+}
+
+// Left-to-right grouping order in the cell preview.
+const VOTER_GROUPS: AvailabilityStatus[] = ["unavailable", "maybe", "available"];
+
+/** One voter as a colored dot; shape encodes status (not color alone). */
+function VoterDot({ color, status }: { color: string; status: AvailabilityStatus }) {
+  if (status === "available") {
+    return (
+      <span
+        className="h-2.5 w-2.5 rounded-full border-2"
+        style={{ background: color, borderColor: "hsl(var(--background))" }}
+      />
+    );
+  }
+  if (status === "maybe") {
+    return (
+      <span
+        className="h-2.5 w-2.5 rounded-full border-2"
+        style={{ background: "transparent", borderColor: color }}
+      />
+    );
+  }
+  // unavailable: ringed dot with a diagonal slash
+  return (
+    <span
+      className="relative h-2.5 w-2.5 rounded-full border-2 opacity-70"
+      style={{ background: "transparent", borderColor: color }}
+    >
+      <span
+        className="absolute left-1/2 top-1/2 h-[1.5px] w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded"
+        style={{ background: color }}
+      />
+    </span>
+  );
+}
+
+/**
+ * At-a-glance dots of who voted, grouped left→right: unavailable, maybe,
+ * available. Shape encodes status — slashed = unavailable, ring = maybe,
+ * filled = available — so color stays free to signal member identity.
+ */
+function VoterDots({ list }: { list: CellVoter[] }) {
+  if (list.length === 0) return null;
+  const groups = VOTER_GROUPS.map((status) => ({
+    status,
+    voters: list.filter((v) => v.status === status),
+  })).filter((g) => g.voters.length > 0);
+  return (
+    <span className="pointer-events-none mt-1 flex items-center gap-1.5">
+      {groups.map((g) => (
+        <span key={g.status} className="flex items-center -space-x-1">
+          {g.voters.map((v) => (
+            <VoterDot key={v.id} color={v.color} status={v.status} />
+          ))}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 // background tint intensity by share-available
@@ -44,6 +111,8 @@ export function AvailabilityGrid({
   onSet,
   canEdit,
   isPast,
+  onShowVoters,
+  voters,
 }: Props) {
   const gridRef = React.useRef<HTMLDivElement>(null);
 
@@ -256,6 +325,29 @@ export function AvailabilityGrid({
                       <Check className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-[hsl(var(--avail))] p-0.5 text-background" />
                     )}
 
+                    {!past && onShowVoters && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`See who voted for ${weekday} ${day} ${TIME_SLOT_LABELS[slot]}`}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onShowVoters(date, slot);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onShowVoters(date, slot);
+                          }
+                        }}
+                        className="absolute -top-2 -left-2 flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground transition-colors hover:border-primary/60 hover:text-foreground"
+                      >
+                        <Users className="h-3 w-3" />
+                      </span>
+                    )}
+
                     <div className="flex items-baseline gap-1 leading-none">
                       <span className="text-lg font-bold tabular-nums">
                         {score?.available ?? 0}
@@ -266,6 +358,11 @@ export function AvailabilityGrid({
                         </span>
                       )}
                     </div>
+
+                    {/* who's coming preview */}
+                    {!past && voters && (
+                      <VoterDots list={voters.get(id) ?? []} />
+                    )}
 
                     {/* your status marker */}
                     <span

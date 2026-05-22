@@ -150,7 +150,6 @@ export interface ScoreModel {
   minPlayers: number;
   bestId?: string;
   backupId?: string;
-  avoidId?: string;
 }
 
 export function useScores(bundle: CampaignBundle): ScoreModel {
@@ -185,7 +184,6 @@ export function useScores(bundle: CampaignBundle): ScoreModel {
       minPlayers,
       bestId: find("best"),
       backupId: find("backup"),
-      avoidId: find("avoid"),
     };
   }, [campaign, round, members, entries]);
 }
