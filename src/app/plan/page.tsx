@@ -37,7 +37,7 @@ import {
   TimeSlot,
 } from "@/lib/core/types";
 import { SlotScore } from "@/lib/core/scoring";
-import { formatDateLabel, todayISO } from "@/lib/utils";
+import { formatDateLabel, isSlotPast, todayISO } from "@/lib/utils";
 
 function PlanInner() {
   const code = useSearchParams().get("code") ?? "";
@@ -206,6 +206,7 @@ function PlanInner() {
             statusFor(entries, myMemberId, date, slot)
           }
           onSet={onSet}
+          isPast={isSlotPast}
         />
 
         <p className="text-center text-xs text-muted-foreground">

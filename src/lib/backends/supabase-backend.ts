@@ -260,6 +260,16 @@ export class SupabaseBackend implements Backend {
     check("insert session", error);
   }
 
+  async persistCancelSession(id: string) {
+    const sb = this.sb;
+    if (!sb) return;
+    const { error } = await sb
+      .from("sessions")
+      .update({ status: "canceled", locked: false })
+      .eq("id", id);
+    check("cancel session", error);
+  }
+
   reset() {
     /* no-op: server data is shared and not wiped from a client */
   }

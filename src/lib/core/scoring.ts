@@ -18,9 +18,11 @@ export interface SlotScore {
   noResponse: number;
   total: number;
   potential: number; // available + maybe
-  playersAvailable: number; // available excluding the DM — gates session viability
+  playersAvailable: number; // available players excluding the DM
+  playersViable: number;    // (available + maybe) players excluding the DM — gates session viability
   score: number;
-  heat: number; // 0..1, share of members available — drives heatmap intensity
+  heat: number; // 0..1, share of members available or maybe — drives heatmap intensity
+  dmOk: boolean; // true if the DM is available/maybe for this slot (or there is no DM)
 }
 
 export type RecommendationKind = "best" | "backup" | "avoid";
@@ -71,6 +73,7 @@ export function scoreRound({
       let maybe = 0;
       let unavailable = 0;
       let hostAvailable = false;
+      let hostMaybe = false;
 
       if (cell) {
         for (const [memberId, status] of cell) {
@@ -79,6 +82,7 @@ export function scoreRound({
             if (memberId === hostMemberId) hostAvailable = true;
           } else if (status === "maybe") {
             maybe++;
+            if (memberId === hostMemberId) hostMaybe = true;
           } else if (status === "unavailable") {
             unavailable++;
           }
@@ -104,8 +108,10 @@ export function scoreRound({
         total,
         potential: available + maybe,
         playersAvailable: available - (hostAvailable ? 1 : 0),
+        playersViable: available + maybe - ((hostAvailable || hostMaybe) ? 1 : 0),
         score,
-        heat: total > 0 ? available / total : 0,
+        heat: total > 0 ? (available + maybe) / total : 0,
+        dmOk: !hostMemberId || hostAvailable || hostMaybe,
       });
     }
   }
@@ -132,7 +138,7 @@ export function rankSlots(scores: SlotScore[]): SlotScore[] {
  * viable session, per the campaign's minPlayers setting.
  */
 export function isViable(slot: SlotScore, minPlayers: number): boolean {
-  return slot.playersAvailable >= minPlayers;
+  return slot.playersViable >= minPlayers;
 }
 
 /**
@@ -141,12 +147,15 @@ export function isViable(slot: SlotScore, minPlayers: number): boolean {
  * - backup: next-ranked viable slot on a *different date* where possible.
  * - avoid: a slot with a negative score or a majority unavailable (only if it
  *   is meaningfully bad and distinct from best/backup).
+ *
+ * Slots where the DM is not available/maybe (`!dmOk`) are excluded entirely:
+ * if the DM can't make it, the session can't happen.
  */
 export function recommend(
   scores: SlotScore[],
   minPlayers = 1,
 ): Recommendation[] {
-  const ranked = rankSlots(scores).filter((s) => s.total > 0);
+  const ranked = rankSlots(scores).filter((s) => s.total > 0 && s.dmOk);
   const out: Recommendation[] = [];
   if (ranked.length === 0) return out;
 

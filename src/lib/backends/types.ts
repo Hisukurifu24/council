@@ -54,6 +54,7 @@ export interface Backend {
     session: Session,
     dm: CampaignMember | undefined,
   ): Promise<void>;
+  persistCancelSession(id: string): Promise<void>;
 
   reset(): void;
 }

@@ -146,11 +146,23 @@ export function useSpeechRecognition(): SpeechState {
           setError(
             `No ${lang === "it-IT" ? "Italian" : "English"} speech detected — this browser may not have that voice language installed. Type the sentence instead.`,
           );
+          // A wedged engine (e.g. a missing language model) may never fire
+          // onend/onerror after stop(), so reset state here instead of waiting
+          // for an event that won't come — otherwise the UI stays stuck on
+          // "Listening" with the input disabled.
+          listeningRef.current = false;
+          setListening(false);
+          recognition.onstart =
+            recognition.onresult =
+            recognition.onerror =
+            recognition.onend =
+              null;
           try {
-            recognition.stop();
+            recognition.abort();
           } catch {
             /* ignore */
           }
+          recognitionRef.current = null;
         }
       }, 9000);
     } catch {

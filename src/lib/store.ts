@@ -586,6 +586,14 @@ export function confirmSession(
   return session;
 }
 
+export function cancelSession(id: string): void {
+  const session = snapshot.sessions[id];
+  if (!session) return;
+  const updated: Session = { ...session, status: "canceled", locked: false };
+  api.upsertSession(updated);
+  void backend.persistCancelSession(id);
+}
+
 /** Test/demo helper: wipe everything. */
 export function resetStore() {
   snapshot = EMPTY_DB;

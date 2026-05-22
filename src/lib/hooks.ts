@@ -33,7 +33,7 @@ import {
   AvailabilityStatus,
 } from "./core/types";
 import type { AuthSession } from "./auth";
-import { rollingDates } from "./utils";
+import { rollingDates, addDaysISO, todayISO, isSlotPast } from "./utils";
 
 /** Subscribe to the whole store; re-renders on any change (local or cross-tab). */
 export function useDb() {
@@ -99,12 +99,26 @@ export function useCampaign(code: string): CampaignBundle {
       return { members: [], entries: [], sessions: [], myMemberId: null };
     }
     const realRound = getActiveRound(campaign.id);
-    // Display a rolling window (today → ~5 weeks) regardless of when the round
-    // was created, so the planner never expires. Entries keep their real round id.
+    const sessions = getSessions(campaign.id);
+
+    // Advance the rolling window to start the day after the most recent
+    // non-canceled session, so confirmed dates disappear from the grid and
+    // the DM can't accidentally re-book the same slot.
+    const lastActive = sessions
+      .filter((s) => s.status !== "canceled")
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    const today = todayISO();
+    const windowStart =
+      lastActive && lastActive.date >= today
+        ? addDaysISO(lastActive.date, 1)
+        : today;
+
+    // Display a rolling window regardless of when the round was created,
+    // so the planner never expires. Entries keep their real round id.
     const round: SchedulingRound | undefined = realRound
       ? {
           ...realRound,
-          dates: rollingDates(),
+          dates: rollingDates(35, windowStart),
           timeSlots: realRound.timeSlots?.length
             ? realRound.timeSlots
             : [...TIME_SLOTS],
@@ -115,7 +129,7 @@ export function useCampaign(code: string): CampaignBundle {
       members: getMembers(campaign.id),
       round,
       entries: realRound ? getEntriesForRound(realRound.id) : [],
-      sessions: getSessions(campaign.id),
+      sessions,
       myMemberId: getMyMemberId(campaign.id),
     };
     // recompute when the snapshot identity changes
@@ -156,7 +170,10 @@ export function useScores(bundle: CampaignBundle): ScoreModel {
     const byCell = new Map<string, SlotScore>();
     for (const s of scores) byCell.set(slotKeyId(s.date, s.timeSlot), s);
 
-    const recommendations = recommend(scores, minPlayers);
+    // Recommendations (and the grid's crown/star markers derived from them)
+    // must ignore past slots, so they never point at a dimmed, unbookable cell.
+    const futureScores = scores.filter((s) => !isSlotPast(s.date, s.timeSlot));
+    const recommendations = recommend(futureScores, minPlayers);
     const find = (k: Recommendation["kind"]) => {
       const r = recommendations.find((x) => x.kind === k);
       return r ? slotKeyId(r.slot.date, r.slot.timeSlot) : undefined;

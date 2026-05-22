@@ -21,6 +21,7 @@ interface Props {
   myStatus: (date: string, slot: TimeSlot) => AvailabilityStatus | undefined;
   onSet: (date: string, slot: TimeSlot, status: AvailabilityStatus) => void;
   canEdit: boolean;
+  isPast?: (date: string, slot: TimeSlot) => boolean;
 }
 
 // background tint intensity by share-available
@@ -42,6 +43,7 @@ export function AvailabilityGrid({
   myStatus,
   onSet,
   canEdit,
+  isPast,
 }: Props) {
   const gridRef = React.useRef<HTMLDivElement>(null);
 
@@ -53,13 +55,14 @@ export function AvailabilityGrid({
 
   const apply = React.useCallback(
     (date: string, slot: TimeSlot, status: AvailabilityStatus) => {
-      if (!canEdit) return;
+      if (!canEdit || (isPast?.(date, slot) ?? false)) return;
       onSet(date, slot, status);
     },
-    [canEdit, onSet],
+    [canEdit, isPast, onSet],
   );
 
   const startPaint = (date: string, slot: TimeSlot) => {
+    if (isPast?.(date, slot)) return;
     const next = cycleStatus(myStatus(date, slot));
     painting.current = next;
     apply(date, slot, next);
@@ -166,18 +169,19 @@ export function AvailabilityGrid({
                 const id = slotKeyId(date, slot);
                 const score = model.byCell.get(id);
                 const mine = myStatus(date, slot);
+                const past = isPast?.(date, slot) ?? false;
                 const isBest = model.bestId === id;
                 const isBackup = model.backupId === id;
                 const isViable =
                   model.minPlayers > 0 &&
-                  (score?.playersAvailable ?? 0) >= model.minPlayers;
+                  (score?.playersViable ?? 0) >= model.minPlayers;
                 const intensity = heatToIntensity(score?.heat ?? 0);
 
                 return (
                   <button
                     key={id}
                     type="button"
-                    disabled={!canEdit}
+                    disabled={!canEdit || past}
                     data-date={date}
                     data-slot={slot}
                     aria-label={`${weekday} ${day} ${TIME_SLOT_LABELS[slot]}: ${
@@ -230,21 +234,25 @@ export function AvailabilityGrid({
                     className={cn(
                       "relative flex h-16 flex-col items-center justify-center rounded-xl border transition-all",
                       "border-border/70",
-                      canEdit ? "hover:border-primary/60" : "cursor-default",
-                      isViable && !isBest && !isBackup &&
+                      past
+                        ? "cursor-default opacity-35"
+                        : canEdit
+                          ? "hover:border-primary/60"
+                          : "cursor-default",
+                      !past && isViable && !isBest && !isBackup &&
                         "ring-1 ring-[hsl(var(--avail))]",
-                      isBest && "ring-2 ring-primary shadow-glow",
-                      isBackup && "ring-1 ring-accent/70",
+                      !past && isBest && "ring-2 ring-primary shadow-glow",
+                      !past && isBackup && "ring-1 ring-accent/70",
                     )}
                     style={{ background: HEAT_BG[intensity] }}
                   >
-                    {isBest && (
+                    {!past && isBest && (
                       <Crown className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-primary p-0.5 text-primary-foreground" />
                     )}
-                    {isBackup && !isBest && (
+                    {!past && isBackup && !isBest && (
                       <Star className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-accent p-0.5 text-accent-foreground" />
                     )}
-                    {isViable && !isBest && !isBackup && (
+                    {!past && isViable && !isBest && !isBackup && (
                       <Check className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-[hsl(var(--avail))] p-0.5 text-background" />
                     )}
 

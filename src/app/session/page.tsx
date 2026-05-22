@@ -2,15 +2,15 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { CalendarCheck, Lock, NotebookPen, Users } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CalendarCheck, Lock, NotebookPen, Trash2, Users } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MemberAvatar } from "@/components/campaign/member-list";
 import { useCampaign, useEnsureCampaign, useMounted } from "@/lib/hooks";
-import { getSession } from "@/lib/store";
+import { cancelSession, getSession } from "@/lib/store";
 import { TIME_SLOT_LABELS } from "@/lib/core/types";
 import { formatDateLabel } from "@/lib/utils";
 
@@ -18,10 +18,12 @@ function SessionInner() {
   const params = useSearchParams();
   const code = params.get("code") ?? "";
   const id = params.get("id") ?? "";
+  const router = useRouter();
   const mounted = useMounted();
   const loading = useEnsureCampaign(code);
   const bundle = useCampaign(code);
   const session = mounted ? getSession(id) : undefined;
+  const [canceling, setCanceling] = React.useState(false);
 
   if (!mounted || loading)
     return <AppShell title="Session" back={`/campaign/?code=${code}`} />;
@@ -33,6 +35,14 @@ function SessionInner() {
       </AppShell>
     );
   }
+
+  const isDM = bundle.myMemberId === bundle.campaign?.hostId;
+  const isCanceled = session.status === "canceled";
+
+  const doCancel = () => {
+    cancelSession(id);
+    router.push(`/campaign/?code=${code}`);
+  };
 
   const { weekday, day } = formatDateLabel(session.date);
   // who is available for this slot
@@ -102,6 +112,37 @@ function SessionInner() {
             Back to planner
           </Button>
         </Link>
+
+        {isDM && !isCanceled && (
+          canceling ? (
+            <div className="flex gap-2">
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={doCancel}
+              >
+                <Trash2 className="h-4 w-4" />
+                Yes, cancel session
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setCanceling(false)}
+              >
+                Keep it
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              className="w-full text-destructive hover:text-destructive"
+              onClick={() => setCanceling(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Cancel session
+            </Button>
+          )
+        )}
       </div>
     </AppShell>
   );

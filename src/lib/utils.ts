@@ -52,14 +52,29 @@ export function formatDateLabel(iso: string): { weekday: string; day: string } {
   };
 }
 
+// Hour (0-23) after which a slot is considered past for today.
+const SLOT_CUTOFF_HOUR: Record<string, number> = {
+  morning: 12,
+  afternoon: 18,
+  evening: 24, // never expires within the current day
+};
+
+export function isSlotPast(date: string, slot: string): boolean {
+  const today = todayISO();
+  if (date < today) return true;
+  if (date > today) return false;
+  return new Date().getHours() >= (SLOT_CUTOFF_HOUR[slot] ?? 0);
+}
+
 export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function addDaysISO(iso: string, days: number): string {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function nextNDays(n: number, start = todayISO()): string[] {

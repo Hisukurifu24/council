@@ -62,7 +62,8 @@ describe("scoreRound", () => {
     expect(cell.noResponse).toBe(0);
     // score = 2*2 + 1*1 + 1*(-2) = 3
     expect(cell.score).toBe(3);
-    expect(cell.heat).toBeCloseTo(0.5);
+    // heat includes maybes: (2+1)/4
+    expect(cell.heat).toBeCloseTo(0.75);
   });
 
   it("counts no-response when members have not voted", () => {
@@ -91,6 +92,7 @@ describe("scoreRound", () => {
 
     expect(cell.available).toBe(3); // includes the DM
     expect(cell.playersAvailable).toBe(2); // excludes the DM
+    expect(cell.playersViable).toBe(2); // same when no maybes
   });
 
   it("applies the host availability bonus", () => {
@@ -190,6 +192,84 @@ describe("recommend", () => {
     // 2 players available (DM excluded): meets a threshold of 2, not 3.
     expect(recommend(scores, 2).some((r) => r.kind === "best")).toBe(true);
     expect(recommend(scores, 3)).toEqual([]);
+  });
+
+  it("counts maybe toward the minPlayers viability threshold", () => {
+    const members = [member("dm", "dm"), member("p1"), member("p2")];
+    const scores = scoreRound({
+      round,
+      members,
+      hostMemberId: "dm",
+      entries: [
+        entry("dm", "2026-05-22", "evening", "available"),
+        entry("p1", "2026-05-22", "evening", "maybe"),
+        entry("p2", "2026-05-22", "evening", "maybe"),
+      ],
+    });
+    // 0 strictly available players, but 2 viable (maybe) — meets threshold of 2.
+    const cell = scores.find(
+      (s) => s.date === "2026-05-22" && s.timeSlot === "evening",
+    )!;
+    expect(cell.playersAvailable).toBe(0);
+    expect(cell.playersViable).toBe(2);
+    expect(recommend(scores, 2).some((r) => r.kind === "best")).toBe(true);
+  });
+
+  it("blocks a slot from recommendation when the DM is unavailable", () => {
+    const members = [member("dm", "dm"), member("p1"), member("p2")];
+    const scores = scoreRound({
+      round,
+      members,
+      hostMemberId: "dm",
+      entries: [
+        entry("dm", "2026-05-22", "evening", "unavailable"),
+        entry("p1", "2026-05-22", "evening", "available"),
+        entry("p2", "2026-05-22", "evening", "available"),
+      ],
+    });
+    const cell = scores.find(
+      (s) => s.date === "2026-05-22" && s.timeSlot === "evening",
+    )!;
+    expect(cell.dmOk).toBe(false);
+    // Every other slot has no DM entry, so the DM hasn't engaged → also blocked.
+    expect(recommend(scores, 1)).toEqual([]);
+  });
+
+  it("blocks a slot when the DM has not responded", () => {
+    const members = [member("dm", "dm"), member("p1"), member("p2")];
+    const scores = scoreRound({
+      round,
+      members,
+      hostMemberId: "dm",
+      entries: [
+        entry("p1", "2026-05-22", "evening", "available"),
+        entry("p2", "2026-05-22", "evening", "available"),
+      ],
+    });
+    const cell = scores.find(
+      (s) => s.date === "2026-05-22" && s.timeSlot === "evening",
+    )!;
+    expect(cell.dmOk).toBe(false);
+    expect(recommend(scores, 2)).toEqual([]);
+  });
+
+  it("allows a slot when the DM is only 'maybe'", () => {
+    const members = [member("dm", "dm"), member("p1"), member("p2")];
+    const scores = scoreRound({
+      round,
+      members,
+      hostMemberId: "dm",
+      entries: [
+        entry("dm", "2026-05-22", "evening", "maybe"),
+        entry("p1", "2026-05-22", "evening", "available"),
+        entry("p2", "2026-05-22", "evening", "available"),
+      ],
+    });
+    const cell = scores.find(
+      (s) => s.date === "2026-05-22" && s.timeSlot === "evening",
+    )!;
+    expect(cell.dmOk).toBe(true);
+    expect(recommend(scores, 2).some((r) => r.kind === "best")).toBe(true);
   });
 
   it("does not count the DM toward the minPlayers threshold", () => {
