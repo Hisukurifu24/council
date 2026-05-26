@@ -11,8 +11,10 @@ import { DEFAULT_MIN_PLAYERS } from "@/lib/core/types";
 import { createCampaignSchema } from "@/lib/core/schemas";
 import { createCampaign } from "@/lib/store";
 import { useCurrentAccount } from "@/lib/hooks";
+import { useI18n } from "@/lib/i18n";
 
 function CreateInner() {
+  const { t } = useI18n();
   const router = useRouter();
   const account = useCurrentAccount();
   const [name, setName] = React.useState("");
@@ -28,7 +30,7 @@ function CreateInner() {
       minPlayers,
     });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Please check the form.");
+      setError(parsed.error.issues[0]?.message ?? t("common.formError"));
       return;
     }
     const { campaign } = createCampaign(parsed.data);
@@ -36,13 +38,13 @@ function CreateInner() {
   };
 
   return (
-    <AppShell title="New campaign" back="/dashboard">
+    <AppShell title={t("create.title")} back="/dashboard">
       <div className="space-y-6">
         <div>
-          <Label htmlFor="name">Campaign name</Label>
+          <Label htmlFor="name">{t("create.name")}</Label>
           <Input
             id="name"
-            placeholder="Storm King's Thunder"
+            placeholder={t("create.namePlaceholder")}
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus
@@ -50,17 +52,16 @@ function CreateInner() {
         </div>
 
         <div>
-          <Label>Minimum players for a session</Label>
+          <Label>{t("create.minPlayers")}</Label>
           <p className="mb-2 text-xs text-muted-foreground">
-            How many players (not counting you, the DM) must be available before a
-            day counts as a viable session.
+            {t("create.minPlayersDesc")}
           </p>
           <div className="flex items-center gap-3">
             <Button
               type="button"
               variant="outline"
               size="icon"
-              aria-label="Decrease"
+              aria-label={t("create.decrease")}
               onClick={() => setMinPlayers((n) => Math.max(0, n - 1))}
             >
               <Minus className="h-5 w-5" />
@@ -72,7 +73,7 @@ function CreateInner() {
               type="button"
               variant="outline"
               size="icon"
-              aria-label="Increase"
+              aria-label={t("create.increase")}
               onClick={() => setMinPlayers((n) => Math.min(50, n + 1))}
             >
               <Plus className="h-5 w-5" />
@@ -81,25 +82,24 @@ function CreateInner() {
         </div>
 
         <div>
-          <Label htmlFor="desc">Notes (optional)</Label>
+          <Label htmlFor="desc">{t("create.notes")}</Label>
           <Textarea
             id="desc"
-            placeholder="Bring snacks. We resume at the Sunless Citadel."
+            placeholder={t("create.notesPlaceholder")}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Dates are filled in automatically — the next 5 weeks, morning /
-          afternoon / evening. Everyone just marks their availability.
+          {t("create.datesHint")}
         </p>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <Button className="w-full" size="lg" onClick={submit}>
           <CalendarCheck className="h-5 w-5" />
-          Create campaign
+          {t("create.cta")}
         </Button>
       </div>
     </AppShell>

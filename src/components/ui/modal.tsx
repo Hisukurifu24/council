@@ -52,7 +52,8 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
             transition={{ type: "spring", stiffness: 380, damping: 32 }}
             className={cn(
               "relative z-10 w-full max-w-md glass border border-border shadow-xl",
-              "rounded-t-3xl sm:rounded-3xl p-5 pb-7 safe-bottom",
+              "rounded-t-3xl sm:rounded-3xl px-5 pt-5",
+              "pb-[calc(1.75rem+env(safe-area-inset-bottom))]",
               className,
             )}
           >

@@ -35,10 +35,12 @@ import {
   renameCampaign,
   updateMinPlayers,
 } from "@/lib/store";
-import { TIME_SLOT_LABELS } from "@/lib/core/types";
-import { formatDateLabel } from "@/lib/utils";
+import { useI18n, useFormatDate, useTimeSlotLabel } from "@/lib/i18n";
 
 function CampaignInner() {
+  const { t } = useI18n();
+  const fmt = useFormatDate();
+  const slotLabel = useTimeSlotLabel();
   const code = useSearchParams().get("code") ?? "";
   const router = useRouter();
   const mounted = useMounted();
@@ -54,21 +56,20 @@ function CampaignInner() {
 
   if (mounted && !loading && !campaign) {
     return (
-      <AppShell title="Campaign" back="/">
+      <AppShell title={t("campaign.title")} back="/">
         <Card className="p-8 text-center">
           <p className="text-muted-foreground">
-            We couldn&apos;t find a campaign for code{" "}
-            <span className="font-mono">{code}</span>.
+            {t("campaign.notFound", { code })}
           </p>
           <Link href="/" className="mt-4 inline-block">
-            <Button variant="outline">Back home</Button>
+            <Button variant="outline">{t("campaign.backHome")}</Button>
           </Link>
         </Card>
       </AppShell>
     );
   }
 
-  if (!campaign) return <AppShell title="Campaign" back="/" />;
+  if (!campaign) return <AppShell title={t("campaign.title")} back="/" />;
 
   const isDM = myMemberId === campaign.hostId;
 
@@ -103,7 +104,7 @@ function CampaignInner() {
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Invite"
+          aria-label={t("layout.invite")}
           onClick={() => setInvite(true)}
         >
           <Share2 className="h-5 w-5" />
@@ -121,17 +122,13 @@ function CampaignInner() {
             <CardContent className="pt-4">
               <div className="mb-2 flex items-center gap-2 font-medium">
                 <UserPlus className="h-4 w-4 text-primary" />
-                Join this campaign
+                {t("campaign.joinTitle")}
               </div>
               <p className="mb-3 text-sm text-muted-foreground">
-                You&apos;ll join as{" "}
-                <span className="font-medium text-foreground">
-                  {account?.displayName}
-                </span>
-                .
+                {t("campaign.joinAs", { name: account?.displayName ?? "" })}
               </p>
               <Button className="w-full" onClick={join}>
-                Join campaign
+                {t("campaign.joinCta")}
               </Button>
             </CardContent>
           </Card>
@@ -144,17 +141,17 @@ function CampaignInner() {
               <div className="pr-3">
                 <div className="flex items-center gap-2 font-medium">
                   <Users className="h-4 w-4 text-primary" />
-                  Min players per session
+                  {t("campaign.minPlayersTitle")}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Available players (excluding you) needed to flag a viable day.
+                  {t("campaign.minPlayersDesc")}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="icon"
-                  aria-label="Decrease"
+                  aria-label={t("create.decrease")}
                   onClick={() =>
                     updateMinPlayers(
                       campaign.id,
@@ -170,7 +167,7 @@ function CampaignInner() {
                 <Button
                   variant="outline"
                   size="icon"
-                  aria-label="Increase"
+                  aria-label={t("create.increase")}
                   onClick={() =>
                     updateMinPlayers(
                       campaign.id,
@@ -192,14 +189,14 @@ function CampaignInner() {
               <div className="min-w-0 pr-3">
                 <div className="flex items-center gap-2 font-medium">
                   <Pencil className="h-4 w-4 text-primary" />
-                  Campaign name
+                  {t("campaign.rename.title")}
                 </div>
                 <p className="mt-1 truncate text-xs text-muted-foreground">
                   {campaign.name}
                 </p>
               </div>
               <Button variant="outline" onClick={openRename}>
-                Rename
+                {t("campaign.rename.cta")}
               </Button>
             </CardContent>
           </Card>
@@ -207,10 +204,10 @@ function CampaignInner() {
 
         {/* Primary CTA */}
         {myMemberId && (
-          <Link href={`/plan/?code=${campaign.inviteCode}`}>
+          <Link href={`/plan/?code=${campaign.inviteCode}`} className="block">
             <Button className="w-full" size="lg">
               <CalendarDays className="h-5 w-5" />
-              Open availability planner
+              {t("campaign.openPlanner")}
             </Button>
           </Link>
         )}
@@ -219,27 +216,30 @@ function CampaignInner() {
         {confirmed.length > 0 && (
           <section>
             <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
-              Booked sessions
+              {t("campaign.bookedSessions")}
             </h2>
             <ul className="space-y-2">
               {confirmed.map((s) => {
-                const { weekday, day } = formatDateLabel(s.date);
+                const { weekday, day } = fmt(s.date);
                 return (
                   <li key={s.id}>
-                    <Link href={`/session/?code=${campaign.inviteCode}&id=${s.id}`}>
+                    <Link
+                      href={`/session/?code=${campaign.inviteCode}&id=${s.id}`}
+                      className="block"
+                    >
                       <Card className="flex items-center gap-3 p-3 transition-all hover:border-primary/60">
                         <div className="rounded-xl bg-[hsl(var(--avail)/0.15)] p-2 text-[hsl(var(--avail))]">
                           <CalendarCheck className="h-5 w-5" />
                         </div>
                         <div className="flex-1">
                           <div className="font-medium">
-                            {weekday} {day} · {TIME_SLOT_LABELS[s.timeSlot]}
+                            {weekday} {day} · {slotLabel(s.timeSlot)}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            Confirmed
+                            {t("campaign.confirmed")}
                           </div>
                         </div>
-                        <Badge variant="avail">Locked</Badge>
+                        <Badge variant="avail">{t("campaign.locked")}</Badge>
                       </Card>
                     </Link>
                   </li>
@@ -253,13 +253,13 @@ function CampaignInner() {
         <section>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-muted-foreground">
-              Party ({members.length})
+              {t("campaign.party", { n: members.length })}
             </h2>
             <button
               className="text-xs text-primary hover:underline"
               onClick={() => setInvite(true)}
             >
-              + Invite
+              {t("campaign.inviteShort")}
             </button>
           </div>
           <MemberList
@@ -276,10 +276,9 @@ function CampaignInner() {
           <Card className="border-destructive/40">
             <CardContent className="flex items-center justify-between pt-4">
               <div className="pr-3">
-                <div className="font-medium">Delete campaign</div>
+                <div className="font-medium">{t("campaign.deleteTitle")}</div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Permanently removes this campaign and everyone&apos;s
-                  availability. This can&apos;t be undone.
+                  {t("campaign.deleteDesc")}
                 </p>
               </div>
               <Button
@@ -287,7 +286,7 @@ function CampaignInner() {
                 onClick={() => setConfirmDelete(true)}
               >
                 <Trash2 className="h-4 w-4" />
-                Delete
+                {t("common.delete")}
               </Button>
             </CardContent>
           </Card>
@@ -304,11 +303,11 @@ function CampaignInner() {
       <Modal
         open={renaming}
         onClose={() => setRenaming(false)}
-        title="Rename campaign"
+        title={t("campaign.rename.modal")}
       >
         <div className="space-y-4">
           <div>
-            <Label htmlFor="campaign-name">Campaign name</Label>
+            <Label htmlFor="campaign-name">{t("campaign.rename.title")}</Label>
             <Input
               id="campaign-name"
               value={nameDraft}
@@ -326,10 +325,10 @@ function CampaignInner() {
               onClick={saveRename}
               disabled={!nameDraft.trim()}
             >
-              Save
+              {t("common.save")}
             </Button>
             <Button variant="ghost" onClick={() => setRenaming(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </div>
@@ -338,22 +337,19 @@ function CampaignInner() {
       <Modal
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        title="Delete campaign?"
+        title={t("campaign.deleteConfirmTitle")}
       >
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            This permanently deletes{" "}
-            <span className="font-medium text-foreground">{campaign.name}</span>{" "}
-            and all of its availability and booked sessions for everyone. This
-            can&apos;t be undone.
+            {t("campaign.deleteConfirmDesc", { name: campaign.name })}
           </p>
           <div className="flex gap-2">
             <Button variant="destructive" className="flex-1" onClick={doDelete}>
               <Trash2 className="h-4 w-4" />
-              Delete campaign
+              {t("campaign.deleteCta")}
             </Button>
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </div>
@@ -364,10 +360,15 @@ function CampaignInner() {
 
 export default function CampaignPage() {
   return (
-    <React.Suspense fallback={<AppShell title="Campaign" back="/" />}>
+    <React.Suspense fallback={<CampaignFallback />}>
       <AuthGate>
         <CampaignInner />
       </AuthGate>
     </React.Suspense>
   );
+}
+
+function CampaignFallback() {
+  const { t } = useI18n();
+  return <AppShell title={t("campaign.title")} back="/" />;
 }

@@ -9,17 +9,19 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useMyCampaigns, useMounted, useEnsureMyCampaigns } from "@/lib/hooks";
 import { getMembers, getSessions } from "@/lib/store";
+import { useI18n } from "@/lib/i18n";
 
 function DashboardInner() {
+  const { t } = useI18n();
   const mounted = useMounted();
   const campaigns = useMyCampaigns();
   useEnsureMyCampaigns();
 
   return (
     <AppShell
-      title="My campaigns"
+      title={t("dashboard.title")}
       right={
-        <Link href="/settings" aria-label="Settings">
+        <Link href="/settings" aria-label={t("layout.settings")}>
           <Button size="icon" variant="ghost">
             <Settings className="h-5 w-5" />
           </Button>
@@ -30,13 +32,13 @@ function DashboardInner() {
         <Link href="/create" className="flex-1">
           <Button className="w-full">
             <Plus className="h-5 w-5" />
-            New campaign
+            {t("dashboard.new")}
           </Button>
         </Link>
         <Link href="/" className="flex-1">
           <Button variant="outline" className="w-full">
             <Users className="h-5 w-5" />
-            Join
+            {t("dashboard.join")}
           </Button>
         </Link>
       </div>
@@ -44,10 +46,9 @@ function DashboardInner() {
       {!mounted ? null : campaigns.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 p-10 text-center">
           <span className="text-4xl">🪄</span>
-          <div className="font-display text-xl">No campaigns yet</div>
+          <div className="font-display text-xl">{t("dashboard.empty.title")}</div>
           <p className="max-w-xs text-sm text-muted-foreground">
-            Create one in seconds, then share the link with your party to start
-            collecting availability.
+            {t("dashboard.empty.desc")}
           </p>
         </Card>
       ) : (
@@ -59,16 +60,16 @@ function DashboardInner() {
             ).length;
             return (
               <li key={c.id}>
-                <Link href={`/campaign/?code=${c.inviteCode}`}>
+                <Link href={`/campaign/?code=${c.inviteCode}`} className="block">
                   <Card className="flex items-center gap-3 p-4 transition-all hover:border-primary/60">
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-display text-lg">
                         {c.name}
                       </div>
                       <div className="mt-1 flex items-center gap-2">
-                        <Badge variant="outline">{members} players</Badge>
+                        <Badge variant="outline">{t("dashboard.players", { n: members })}</Badge>
                         {sessions > 0 && (
-                          <Badge variant="primary">{sessions} booked</Badge>
+                          <Badge variant="primary">{t("dashboard.booked", { n: sessions })}</Badge>
                         )}
                       </div>
                     </div>

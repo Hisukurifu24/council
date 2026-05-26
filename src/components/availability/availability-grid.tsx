@@ -5,21 +5,14 @@ import { Check, Crown, Star, Users } from "lucide-react";
 import {
   AvailabilityStatus,
   SchedulingRound,
-  TIME_SLOT_LABELS,
   TimeSlot,
   slotKeyId,
 } from "@/lib/core/types";
 import { cycleStatus } from "@/lib/store";
 import { ScoreModel } from "@/lib/hooks";
-import { heatToIntensity } from "@/lib/core/scoring";
-import { cn, formatDateLabel } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { StatusGlyph } from "./status";
-
-export interface CellVoter {
-  id: string;
-  color: string;
-  status: AvailabilityStatus;
-}
+import { useI18n, useFormatDate, useTimeSlotLabel, useStatusLabel } from "@/lib/i18n";
 
 interface Props {
   round: SchedulingRound;
@@ -29,77 +22,20 @@ interface Props {
   canEdit: boolean;
   isPast?: (date: string, slot: TimeSlot) => boolean;
   onShowVoters?: (date: string, slot: TimeSlot) => void;
-  voters?: Map<string, CellVoter[]>;
 }
 
-// Left-to-right grouping order in the cell preview.
-const VOTER_GROUPS: AvailabilityStatus[] = ["unavailable", "maybe", "available"];
-
-/** One voter as a colored dot; shape encodes status (not color alone). */
-function VoterDot({ color, status }: { color: string; status: AvailabilityStatus }) {
-  if (status === "available") {
-    return (
-      <span
-        className="h-2.5 w-2.5 rounded-full border-2"
-        style={{ background: color, borderColor: "hsl(var(--background))" }}
-      />
-    );
-  }
-  if (status === "maybe") {
-    return (
-      <span
-        className="h-2.5 w-2.5 rounded-full border-2"
-        style={{ background: "transparent", borderColor: color }}
-      />
-    );
-  }
-  // unavailable: ringed dot with a diagonal slash
-  return (
-    <span
-      className="relative h-2.5 w-2.5 rounded-full border-2 opacity-70"
-      style={{ background: "transparent", borderColor: color }}
-    >
-      <span
-        className="absolute left-1/2 top-1/2 h-[1.5px] w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded"
-        style={{ background: color }}
-      />
-    </span>
-  );
-}
-
-/**
- * At-a-glance dots of who voted, grouped left→right: unavailable, maybe,
- * available. Shape encodes status — slashed = unavailable, ring = maybe,
- * filled = available — so color stays free to signal member identity.
- */
-function VoterDots({ list }: { list: CellVoter[] }) {
-  if (list.length === 0) return null;
-  const groups = VOTER_GROUPS.map((status) => ({
-    status,
-    voters: list.filter((v) => v.status === status),
-  })).filter((g) => g.voters.length > 0);
-  return (
-    <span className="pointer-events-none mt-1 flex items-center gap-1.5">
-      {groups.map((g) => (
-        <span key={g.status} className="flex items-center -space-x-1">
-          {g.voters.map((v) => (
-            <VoterDot key={v.id} color={v.color} status={v.status} />
-          ))}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-// background tint intensity by share-available
-const HEAT_BG = [
-  "transparent",
-  "hsl(var(--avail) / 0.12)",
-  "hsl(var(--avail) / 0.22)",
-  "hsl(var(--avail) / 0.34)",
-  "hsl(var(--avail) / 0.48)",
-  "hsl(var(--avail) / 0.62)",
-];
+// Cell background reflects *your* personal status only, so a glance answers
+// "did I mark this?" — the group's availability is shown via the meter bar.
+const MINE_BG: Record<AvailabilityStatus, string> = {
+  available: "hsl(var(--avail) / 0.22)",
+  maybe: "hsl(var(--maybe) / 0.18)",
+  unavailable: "hsl(var(--unavail) / 0.14)",
+};
+const MINE_BORDER: Record<AvailabilityStatus, string> = {
+  available: "hsl(var(--avail) / 0.85)",
+  maybe: "hsl(var(--maybe) / 0.85)",
+  unavailable: "hsl(var(--unavail) / 0.7)",
+};
 
 const LONG_PRESS_MS = 280; // hold this long on touch to start drag-painting
 const MOVE_CANCEL_PX = 10; // finger moves more than this before the hold → it's a scroll
@@ -112,8 +48,11 @@ export function AvailabilityGrid({
   canEdit,
   isPast,
   onShowVoters,
-  voters,
 }: Props) {
+  const { t } = useI18n();
+  const fmt = useFormatDate();
+  const slotLabel = useTimeSlotLabel();
+  const statusLabel = useStatusLabel();
   const gridRef = React.useRef<HTMLDivElement>(null);
 
   // The status currently being painted (non-null while a drag is active, for
@@ -220,12 +159,12 @@ export function AvailabilityGrid({
             key={slot}
             className="pb-1 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground"
           >
-            {TIME_SLOT_LABELS[slot]}
+            {slotLabel(slot)}
           </div>
         ))}
 
         {round.dates.map((date) => {
-          const { weekday, day } = formatDateLabel(date);
+          const { weekday, day } = fmt(date);
           return (
             <React.Fragment key={date}>
               <div className="flex flex-col justify-center py-1">
@@ -244,7 +183,16 @@ export function AvailabilityGrid({
                 const isViable =
                   model.minPlayers > 0 &&
                   (score?.playersViable ?? 0) >= model.minPlayers;
-                const intensity = heatToIntensity(score?.heat ?? 0);
+                const partyTotal = score?.total ?? 0;
+                const availShare = partyTotal > 0
+                  ? (score?.available ?? 0) / partyTotal
+                  : 0;
+                const maybeShare = partyTotal > 0
+                  ? (score?.maybe ?? 0) / partyTotal
+                  : 0;
+                const unavailShare = partyTotal > 0
+                  ? (score?.unavailable ?? 0) / partyTotal
+                  : 0;
 
                 return (
                   <button
@@ -253,13 +201,17 @@ export function AvailabilityGrid({
                     disabled={!canEdit || past}
                     data-date={date}
                     data-slot={slot}
-                    aria-label={`${weekday} ${day} ${TIME_SLOT_LABELS[slot]}: ${
-                      score?.available ?? 0
-                    } available${
-                      score?.maybe ? `, ${score.maybe} maybe` : ""
-                    }${isViable ? ", viable session" : ""}. Your status: ${
-                      mine ?? "not set"
-                    }.`}
+                    aria-label={t("grid.cellAria", {
+                      weekday,
+                      day,
+                      slot: slotLabel(slot),
+                      avail: score?.available ?? 0,
+                      maybeFrag: score?.maybe
+                        ? t("grid.maybeFrag", { n: score.maybe })
+                        : "",
+                      viableFrag: isViable ? t("grid.viableFrag") : "",
+                      mine: mine ? t(`status.${mine}`) : t("status.notSet"),
+                    })}
                     onPointerDown={(e) => {
                       if (!canEdit) return;
                       if (e.pointerType === "mouse") {
@@ -301,8 +253,7 @@ export function AvailabilityGrid({
                       }
                     }}
                     className={cn(
-                      "relative flex h-16 flex-col items-center justify-center rounded-xl border transition-all",
-                      "border-border/70",
+                      "relative flex h-16 flex-col items-center justify-center pt-2 rounded-xl border transition-all",
                       past
                         ? "cursor-default opacity-35"
                         : canEdit
@@ -313,7 +264,14 @@ export function AvailabilityGrid({
                       !past && isBest && "ring-2 ring-primary shadow-glow",
                       !past && isBackup && "ring-1 ring-accent/70",
                     )}
-                    style={{ background: HEAT_BG[intensity] }}
+                    style={{
+                      background: mine && !past ? MINE_BG[mine] : "transparent",
+                      borderColor:
+                        mine && !past
+                          ? MINE_BORDER[mine]
+                          : "hsl(var(--border) / 0.7)",
+                      borderWidth: mine && !past ? 2 : 1,
+                    }}
                   >
                     {!past && isBest && (
                       <Crown className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-primary p-0.5 text-primary-foreground" />
@@ -323,29 +281,6 @@ export function AvailabilityGrid({
                     )}
                     {!past && isViable && !isBest && !isBackup && (
                       <Check className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-[hsl(var(--avail))] p-0.5 text-background" />
-                    )}
-
-                    {!past && onShowVoters && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`See who voted for ${weekday} ${day} ${TIME_SLOT_LABELS[slot]}`}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onShowVoters(date, slot);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onShowVoters(date, slot);
-                          }
-                        }}
-                        className="absolute -top-2 -left-2 flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground transition-colors hover:border-primary/60 hover:text-foreground"
-                      >
-                        <Users className="h-3 w-3" />
-                      </span>
                     )}
 
                     <div className="flex items-baseline gap-1 leading-none">
@@ -359,21 +294,81 @@ export function AvailabilityGrid({
                       )}
                     </div>
 
-                    {/* who's coming preview */}
-                    {!past && voters && (
-                      <VoterDots list={voters.get(id) ?? []} />
-                    )}
-
-                    {/* your status marker */}
+                    {/* what *you* voted — icon-only pill so it stays compact;
+                        full label lives in the aria-label for accessibility */}
                     <span
-                      className={cn(
-                        "mt-1 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                        mine ? "bg-background/70" : "text-muted-foreground/50",
-                      )}
+                      aria-label={
+                        mine
+                          ? `${t("common.you")}: ${statusLabel(mine)}`
+                          : t("status.notSet")
+                      }
+                      className="mt-1 flex h-4 w-4 items-center justify-center rounded-full bg-background/70"
                     >
                       <StatusGlyph status={mine} className="h-3 w-3" />
-                      <span>{mine ? "you" : "—"}</span>
                     </span>
+
+                    {/* group meter — share of party by status: available
+                        (green) → maybe (amber) → unavailable (red). The empty
+                        tail is "no response yet". Kept at the top edge so it
+                        stays visually separate from "your status" (the cell
+                        background + colored border). */}
+                    {!past && partyTotal > 0 && (
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-1.5 top-1.5 flex h-1 overflow-hidden rounded-full bg-border/40"
+                      >
+                        <span
+                          className="block h-full"
+                          style={{
+                            width: `${Math.round(availShare * 100)}%`,
+                            background: "hsl(var(--avail))",
+                          }}
+                        />
+                        <span
+                          className="block h-full"
+                          style={{
+                            width: `${Math.round(maybeShare * 100)}%`,
+                            background: "hsl(var(--maybe) / 0.7)",
+                          }}
+                        />
+                        <span
+                          className="block h-full"
+                          style={{
+                            width: `${Math.round(unavailShare * 100)}%`,
+                            background: "hsl(var(--unavail) / 0.65)",
+                          }}
+                        />
+                      </span>
+                    )}
+
+                    {/* "who voted" — sits above the meter at the top-left so
+                        the icon and bar read as one composite "group" widget */}
+                    {!past && onShowVoters && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label={t("grid.seeWhoVoted", {
+                          weekday,
+                          day,
+                          slot: slotLabel(slot),
+                        })}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onShowVoters(date, slot);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onShowVoters(date, slot);
+                          }
+                        }}
+                        className="absolute left-0.5 top-0.5 z-10 flex h-4 w-4 items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground transition-colors hover:border-primary/60 hover:text-foreground"
+                      >
+                        <Users className="h-2.5 w-2.5" />
+                      </span>
+                    )}
                   </button>
                 );
               })}

@@ -6,6 +6,7 @@ import { Check, Copy, MessageSquare, Share2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "@/lib/i18n";
 
 export function InviteSheet({
   open,
@@ -18,6 +19,7 @@ export function InviteSheet({
   code: string;
   campaignName: string;
 }) {
+  const { t } = useI18n();
   const [qr, setQr] = React.useState<string>("");
   const [copied, setCopied] = React.useState(false);
 
@@ -49,8 +51,8 @@ export function InviteSheet({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Join "${campaignName}" on Council`,
-          text: `Mark your availability for ${campaignName}:`,
+          title: t("invite.shareTitle", { name: campaignName }),
+          text: t("invite.shareText", { name: campaignName }),
           url,
         });
       } catch {
@@ -64,12 +66,12 @@ export function InviteSheet({
   const discordUrl = url; // pasting the link in Discord unfurls it
 
   return (
-    <Modal open={open} onClose={onClose} title="Invite your party">
+    <Modal open={open} onClose={onClose} title={t("invite.title")}>
       <div className="flex flex-col items-center gap-4">
         {qr ? (
           <img
             src={qr}
-            alt="QR code to join the campaign"
+            alt={t("invite.qrAlt")}
             className="h-44 w-44 rounded-2xl border border-border bg-white p-2"
           />
         ) : (
@@ -78,14 +80,14 @@ export function InviteSheet({
 
         <div className="text-center">
           <div className="text-xs uppercase tracking-wide text-muted-foreground">
-            Invite code
+            {t("invite.code")}
           </div>
           <div className="font-display text-3xl tracking-[0.3em]">{code}</div>
         </div>
 
         <div className="flex w-full gap-2">
           <Input readOnly value={url} className="text-sm" />
-          <Button variant="secondary" size="icon" onClick={copy} aria-label="Copy link">
+          <Button variant="secondary" size="icon" onClick={copy} aria-label={t("invite.copyLink")}>
             {copied ? (
               <Check className="h-5 w-5 text-[hsl(var(--avail))]" />
             ) : (
@@ -97,7 +99,7 @@ export function InviteSheet({
         <div className="grid w-full grid-cols-2 gap-2">
           <Button variant="outline" onClick={shareNative}>
             <Share2 className="h-4 w-4" />
-            Share
+            {t("invite.share")}
           </Button>
           <a
             href={`https://discord.com/channels/@me`}
@@ -111,7 +113,7 @@ export function InviteSheet({
           </a>
         </div>
         <p className="text-center text-xs text-muted-foreground">
-          Link copied — paste it into your Discord channel. No account needed to join.
+          {t("invite.discordHint")}
         </p>
       </div>
     </Modal>

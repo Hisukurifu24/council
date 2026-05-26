@@ -11,10 +11,12 @@ import { Button } from "@/components/ui/button";
 import { VoterBreakdown } from "@/components/availability/voter-breakdown";
 import { useCampaign, useEnsureCampaign, useMounted } from "@/lib/hooks";
 import { cancelSession, getSession } from "@/lib/store";
-import { TIME_SLOT_LABELS } from "@/lib/core/types";
-import { formatDateLabel } from "@/lib/utils";
+import { useI18n, useFormatDate, useTimeSlotLabel } from "@/lib/i18n";
 
 function SessionInner() {
+  const { t } = useI18n();
+  const fmt = useFormatDate();
+  const slotLabel = useTimeSlotLabel();
   const params = useSearchParams();
   const code = params.get("code") ?? "";
   const id = params.get("id") ?? "";
@@ -26,12 +28,12 @@ function SessionInner() {
   const [canceling, setCanceling] = React.useState(false);
 
   if (!mounted || loading)
-    return <AppShell title="Session" back={`/campaign/?code=${code}`} />;
+    return <AppShell title={t("session.title")} back={`/campaign/?code=${code}`} />;
 
   if (!session || !bundle.campaign) {
     return (
-      <AppShell title="Session" back={`/campaign/?code=${code}`}>
-        <p className="text-center text-muted-foreground">Session not found.</p>
+      <AppShell title={t("session.title")} back={`/campaign/?code=${code}`}>
+        <p className="text-center text-muted-foreground">{t("session.notFound")}</p>
       </AppShell>
     );
   }
@@ -44,7 +46,7 @@ function SessionInner() {
     router.push(`/campaign/?code=${code}`);
   };
 
-  const { weekday, day } = formatDateLabel(session.date);
+  const { weekday, day } = fmt(session.date);
 
   return (
     <AppShell title={bundle.campaign.name} back={`/campaign/?code=${code}`}>
@@ -53,11 +55,11 @@ function SessionInner() {
           <div className="bg-[hsl(var(--avail)/0.12)] p-5 text-center">
             <div className="mb-2 inline-flex items-center gap-1.5">
               <Badge variant="avail">
-                <CalendarCheck className="h-3.5 w-3.5" /> Confirmed
+                <CalendarCheck className="h-3.5 w-3.5" /> {t("campaign.confirmed")}
               </Badge>
               {session.locked && (
                 <Badge variant="outline">
-                  <Lock className="h-3 w-3" /> Locked
+                  <Lock className="h-3 w-3" /> {t("campaign.locked")}
                 </Badge>
               )}
             </div>
@@ -65,7 +67,7 @@ function SessionInner() {
               {weekday} {day}
             </div>
             <div className="text-lg text-muted-foreground">
-              {TIME_SLOT_LABELS[session.timeSlot]}
+              {slotLabel(session.timeSlot)}
             </div>
           </div>
           <CardContent className="pt-4">
@@ -75,14 +77,14 @@ function SessionInner() {
                 <p>{session.notes}</p>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No notes added.</p>
+              <p className="text-sm text-muted-foreground">{t("session.noNotes")}</p>
             )}
           </CardContent>
         </Card>
 
         <section>
           <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
-            <Users className="h-4 w-4" /> Who voted what
+            <Users className="h-4 w-4" /> {t("session.whoVoted")}
           </h2>
           <VoterBreakdown
             members={bundle.members}
@@ -93,9 +95,9 @@ function SessionInner() {
           />
         </section>
 
-        <Link href={`/plan/?code=${code}`}>
+        <Link href={`/plan/?code=${code}`} className="block">
           <Button variant="outline" className="w-full">
-            Back to planner
+            {t("session.backToPlanner")}
           </Button>
         </Link>
 
@@ -108,14 +110,14 @@ function SessionInner() {
                 onClick={doCancel}
               >
                 <Trash2 className="h-4 w-4" />
-                Yes, cancel session
+                {t("session.cancelYes")}
               </Button>
               <Button
                 variant="outline"
                 className="flex-1"
                 onClick={() => setCanceling(false)}
               >
-                Keep it
+                {t("session.cancelKeep")}
               </Button>
             </div>
           ) : (
@@ -125,7 +127,7 @@ function SessionInner() {
               onClick={() => setCanceling(true)}
             >
               <Trash2 className="h-4 w-4" />
-              Cancel session
+              {t("session.cancelCta")}
             </Button>
           )
         )}
@@ -136,8 +138,13 @@ function SessionInner() {
 
 export default function SessionPage() {
   return (
-    <React.Suspense fallback={<AppShell title="Session" back="/" />}>
+    <React.Suspense fallback={<SessionFallback />}>
       <SessionInner />
     </React.Suspense>
   );
+}
+
+function SessionFallback() {
+  const { t } = useI18n();
+  return <AppShell title={t("session.title")} back="/" />;
 }

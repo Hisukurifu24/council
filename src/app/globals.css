@@ -92,7 +92,10 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
   }
+  /* Adds the iOS safe-area inset on TOP of whatever padding/margin you already
+     have. Apply to an inner spacer element, not to a container whose padding
+     you also want preserved. */
   .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
+    margin-bottom: env(safe-area-inset-bottom);
   }
 }

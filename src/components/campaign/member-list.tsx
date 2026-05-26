@@ -4,6 +4,7 @@ import { Crown } from "lucide-react";
 import { CampaignMember, SchedulingRound } from "@/lib/core/types";
 import { AvailabilityEntry } from "@/lib/core/types";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 function initials(name?: string | null) {
   if (!name) return "?";
@@ -22,6 +23,7 @@ export function MemberAvatar({
   member: CampaignMember;
   className?: string;
 }) {
+  const { t } = useI18n();
   return (
     <span
       className={cn(
@@ -29,7 +31,7 @@ export function MemberAvatar({
         className,
       )}
       style={{ background: member.color }}
-      title={member.guestName ?? "Player"}
+      title={member.guestName ?? t("members.player")}
     >
       {initials(member.guestName)}
     </span>
@@ -49,6 +51,7 @@ export function MemberList({
   hostId?: string;
   myMemberId?: string | null;
 }) {
+  const { t } = useI18n();
   const totalCells = round ? round.dates.length * round.timeSlots.length : 0;
   const respondedBy = (id: string) =>
     new Set(
@@ -70,18 +73,18 @@ export function MemberList({
               <div className="flex items-center gap-1.5 truncate text-sm font-medium">
                 {m.guestName}
                 {m.id === myMemberId && (
-                  <span className="text-xs text-muted-foreground">(you)</span>
+                  <span className="text-xs text-muted-foreground">({t("common.you")})</span>
                 )}
                 {m.id === hostId && (
-                  <Crown className="h-3.5 w-3.5 text-accent" aria-label="DM" />
+                  <Crown className="h-3.5 w-3.5 text-accent" aria-label={t("members.dm")} />
                 )}
               </div>
               <div className="text-xs text-muted-foreground">
                 {responded === 0
-                  ? "No response yet"
+                  ? t("members.noResponse")
                   : done
-                    ? "All set"
-                    : `${responded}/${totalCells} marked`}
+                    ? t("members.allSet")
+                    : t("members.marked", { n: responded, total: totalCells })}
               </div>
             </div>
             <span

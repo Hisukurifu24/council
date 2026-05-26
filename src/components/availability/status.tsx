@@ -1,15 +1,27 @@
+"use client";
+
 import { Check, HelpCircle, X, Circle } from "lucide-react";
 import { AvailabilityStatus } from "@/lib/core/types";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
-export const STATUS_META: Record<
+export const STATUS_STYLE: Record<
   AvailabilityStatus,
-  { label: string; color: string; Icon: typeof Check }
+  { color: string; Icon: typeof Check }
 > = {
-  available: { label: "Available", color: "hsl(var(--avail))", Icon: Check },
-  maybe: { label: "Maybe", color: "hsl(var(--maybe))", Icon: HelpCircle },
-  unavailable: { label: "Unavailable", color: "hsl(var(--unavail))", Icon: X },
+  available: { color: "hsl(var(--avail))", Icon: Check },
+  maybe: { color: "hsl(var(--maybe))", Icon: HelpCircle },
+  unavailable: { color: "hsl(var(--unavail))", Icon: X },
 };
+
+export function useStatusMeta() {
+  const { t } = useI18n();
+  return (status: AvailabilityStatus) => ({
+    label: t(`status.${status}`),
+    color: STATUS_STYLE[status].color,
+    Icon: STATUS_STYLE[status].Icon,
+  });
+}
 
 /** Small status pill used in legends and member rows (icon + label, not color alone). */
 export function StatusChip({
@@ -19,7 +31,8 @@ export function StatusChip({
   status: AvailabilityStatus;
   className?: string;
 }) {
-  const { label, color, Icon } = STATUS_META[status];
+  const meta = useStatusMeta()(status);
+  const { color, Icon, label } = meta;
   return (
     <span
       className={cn("inline-flex items-center gap-1.5 text-sm", className)}
@@ -45,7 +58,7 @@ export function StatusGlyph({
         strokeWidth={2}
       />
     );
-  const { color, Icon } = STATUS_META[status];
+  const { color, Icon } = STATUS_STYLE[status];
   return (
     <Icon
       className={cn("h-4 w-4", className)}

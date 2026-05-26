@@ -9,26 +9,29 @@ import { Input, Label } from "@/components/ui/input";
 import { useCurrentAccount, useMounted } from "@/lib/hooks";
 import { logIn, signUp } from "@/lib/store";
 import { logInSchema, signUpSchema } from "@/lib/core/schemas";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * Renders children only when an account is logged in; otherwise shows a simple
  * email + password login / sign-up form. Used to gate create / join / dashboard.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   const mounted = useMounted();
   const account = useCurrentAccount();
 
-  if (!mounted) return <AppShell title="Council" back="/" />;
+  if (!mounted) return <AppShell title={t("brand.title")} back="/" />;
   if (account) return <>{children}</>;
 
   return (
-    <AppShell title="Sign in" back="/">
+    <AppShell title={t("auth.signIn")} back="/">
       <AuthForm />
     </AppShell>
   );
 }
 
 export function AuthForm({ onAuthed }: { onAuthed?: () => void }) {
+  const { t } = useI18n();
   const [mode, setMode] = React.useState<"login" | "signup">("login");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -46,7 +49,7 @@ export function AuthForm({ onAuthed }: { onAuthed?: () => void }) {
       ? signUpSchema.safeParse({ email, password, displayName })
       : logInSchema.safeParse({ email, password });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Please check the form.");
+      setError(parsed.error.issues[0]?.message ?? t("common.formError"));
       return;
     }
 
@@ -62,7 +65,9 @@ export function AuthForm({ onAuthed }: { onAuthed?: () => void }) {
       onAuthed?.();
     } catch (e) {
       setError(
-        e instanceof Error ? `Unexpected error: ${e.message}` : "Unexpected error.",
+        e instanceof Error
+          ? t("common.unexpectedErrorWith", { msg: e.message })
+          : t("common.unexpectedError"),
       );
     } finally {
       setBusy(false);
@@ -74,21 +79,19 @@ export function AuthForm({ onAuthed }: { onAuthed?: () => void }) {
       <CardContent className="space-y-4 pt-5">
         <div className="text-center">
           <div className="font-display text-2xl">
-            {isSignup ? "Create your account" : "Welcome back"}
+            {isSignup ? t("auth.signupTitle") : t("auth.loginTitle")}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {isSignup
-              ? "Just an email and password — so your campaigns follow you."
-              : "Log in to see your campaigns."}
+            {isSignup ? t("auth.signupSub") : t("auth.loginSub")}
           </p>
         </div>
 
         {isSignup && (
           <div>
-            <Label htmlFor="displayName">Display name</Label>
+            <Label htmlFor="displayName">{t("auth.displayName")}</Label>
             <Input
               id="displayName"
-              placeholder="Dungeon Master"
+              placeholder={t("auth.displayNamePlaceholder")}
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               autoComplete="nickname"
@@ -97,11 +100,11 @@ export function AuthForm({ onAuthed }: { onAuthed?: () => void }) {
         )}
 
         <div>
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t("auth.email")}</Label>
           <Input
             id="email"
             type="email"
-            placeholder="you@example.com"
+            placeholder={t("auth.emailPlaceholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
@@ -109,11 +112,11 @@ export function AuthForm({ onAuthed }: { onAuthed?: () => void }) {
         </div>
 
         <div>
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t("auth.password")}</Label>
           <Input
             id="password"
             type="password"
-            placeholder="••••••"
+            placeholder={t("auth.passwordPlaceholder")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
@@ -130,10 +133,10 @@ export function AuthForm({ onAuthed }: { onAuthed?: () => void }) {
             <LogIn className="h-5 w-5" />
           )}
           {busy
-            ? "Please wait…"
+            ? t("common.pleaseWait")
             : isSignup
-              ? "Create account"
-              : "Log in"}
+              ? t("auth.createAccount")
+              : t("auth.logIn")}
         </Button>
 
         <button
@@ -144,9 +147,7 @@ export function AuthForm({ onAuthed }: { onAuthed?: () => void }) {
             setMode(isSignup ? "login" : "signup");
           }}
         >
-          {isSignup
-            ? "Already have an account? Log in"
-            : "New here? Create an account"}
+          {isSignup ? t("auth.toLogin") : t("auth.toSignup")}
         </button>
       </CardContent>
     </Card>

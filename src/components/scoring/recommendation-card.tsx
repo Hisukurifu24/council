@@ -3,20 +3,20 @@
 import { Crown, Star, CalendarCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import { Recommendation } from "@/lib/core/scoring";
-import { TIME_SLOT_LABELS } from "@/lib/core/types";
 import { Button } from "@/components/ui/button";
-import { cn, formatDateLabel } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { useI18n, useFormatDate, useTimeSlotLabel } from "@/lib/i18n";
 
 const META = {
   best: {
-    label: "Best session time",
+    labelKey: "rec.best",
     Icon: Crown,
     ring: "ring-primary",
     text: "text-primary",
     bg: "bg-primary/10",
   },
   backup: {
-    label: "Good backup",
+    labelKey: "rec.backup",
     Icon: Star,
     ring: "ring-accent/60",
     text: "text-accent",
@@ -33,8 +33,11 @@ export function RecommendationCard({
   canConfirm?: boolean;
   onConfirm?: () => void;
 }) {
+  const { t } = useI18n();
+  const fmt = useFormatDate();
+  const slotLabel = useTimeSlotLabel();
   const m = META[rec.kind];
-  const { weekday, day } = formatDateLabel(rec.slot.date);
+  const { weekday, day } = fmt(rec.slot.date);
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -50,21 +53,21 @@ export function RecommendationCard({
       </div>
       <div className="min-w-0 flex-1">
         <div className={cn("text-xs font-semibold uppercase tracking-wide", m.text)}>
-          {m.label}
+          {t(m.labelKey)}
         </div>
         <div className="truncate font-display text-lg leading-tight">
-          {weekday} {day} · {TIME_SLOT_LABELS[rec.slot.timeSlot]}
+          {weekday} {day} · {slotLabel(rec.slot.timeSlot)}
         </div>
         <div className="text-xs text-muted-foreground">
-          {rec.slot.available} available
-          {rec.slot.maybe > 0 && ` (+${rec.slot.maybe} maybe)`} · potential{" "}
-          {rec.slot.potential}/{rec.slot.total}
+          {t("rec.available", { n: rec.slot.available })}
+          {rec.slot.maybe > 0 && t("rec.maybe", { n: rec.slot.maybe })}
+          {t("rec.potential", { a: rec.slot.potential, b: rec.slot.total })}
         </div>
       </div>
       {canConfirm && onConfirm && (
         <Button size="sm" variant={rec.kind === "best" ? "default" : "outline"} onClick={onConfirm}>
           <CalendarCheck className="h-4 w-4" />
-          Confirm
+          {t("rec.confirm")}
         </Button>
       )}
     </motion.div>
