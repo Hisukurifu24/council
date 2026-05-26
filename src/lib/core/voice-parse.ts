@@ -26,6 +26,10 @@ interface ParseOpts {
   today: string; // ISO reference date
   windowDates: string[]; // valid rolling-window dates; results are clamped to these
   lang?: ParseLang; // reserved; the matcher understands both languages regardless
+  // Cells the speaker has already marked, as `date__timeSlot`. When the clause
+  // mentions "remaining"/"rest"/"rimanenti"/"resto" these are skipped so the
+  // sentence only fills in unset cells.
+  markedCells?: ReadonlySet<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,9 +116,31 @@ const AVAILABLE_HINTS = [
   "libero", "libera", "disponibile", "posso", "ci sono", "si", "ok", "okay",
 ];
 
-const MORNING_HINTS = ["morning", "mattina", "mattino"];
-const AFTERNOON_HINTS = ["afternoon", "pomeriggio"];
-const EVENING_HINTS = ["evening", "night", "tonight", "sera", "serata", "notte", "stasera", "stanotte"];
+// "Remaining" / "the rest" — fills in only cells the speaker hasn't marked yet.
+const REMAINING_HINTS = [
+  "remaining",
+  "the rest",
+  "rest of",
+  "leftover",
+  "leftovers",
+  "everything else",
+  "all the rest",
+  "rimanenti",
+  "rimanente",
+  "restanti",
+  "restante",
+  "il resto",
+  "resto",
+  "altri",
+  "altre",
+];
+
+const MORNING_HINTS = ["morning", "mornings", "mattina", "mattine", "mattino"];
+const AFTERNOON_HINTS = ["afternoon", "afternoons", "pomeriggio", "pomeriggi"];
+const EVENING_HINTS = [
+  "evening", "evenings", "night", "nights", "tonight",
+  "sera", "sere", "serata", "serate", "notte", "notti", "stasera", "stanotte",
+];
 const ALLDAY_HINTS = ["all day", "whole day", "entire day", "tutto il giorno", "giornata"];
 
 // Spoken markers that also pin the date to "today".
@@ -295,13 +321,16 @@ export function parseAvailabilitySpeech(
     .filter(Boolean);
 
   let prevStatus: AvailabilityStatus = "available";
+  const marked = opts.markedCells ?? new Set<string>();
 
   for (const clause of clauses) {
     const detected = detectStatus(clause);
     const status = detected ?? prevStatus;
     if (detected) prevStatus = detected;
 
-    const dates = resolveDates(clause, opts.today);
+    const isRemaining = REMAINING_HINTS.some((w) => hasWord(clause, w));
+    let dates = resolveDates(clause, opts.today);
+    if (isRemaining && dates.length === 0) dates = [...opts.windowDates];
     if (dates.length === 0) continue;
 
     const slots = detectSlots(clause);
@@ -313,7 +342,9 @@ export function parseAvailabilitySpeech(
         continue;
       }
       for (const timeSlot of effectiveSlots) {
-        byCell.set(`${date}__${timeSlot}`, { date, timeSlot, status });
+        const key = `${date}__${timeSlot}`;
+        if (isRemaining && marked.has(key)) continue;
+        byCell.set(key, { date, timeSlot, status });
       }
     }
   }

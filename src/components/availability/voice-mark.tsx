@@ -30,12 +30,13 @@ interface Props {
     cells: { date: string; timeSlot: TimeSlot }[],
     status: AvailabilityStatus,
   ) => void;
+  isMarked?: (date: string, timeSlot: TimeSlot) => boolean;
   disabled?: boolean;
 }
 
 const STATUS_ORDER: AvailabilityStatus[] = ["available", "maybe", "unavailable"];
 
-export function VoiceMark({ round, today, onApply, disabled }: Props) {
+export function VoiceMark({ round, today, onApply, isMarked, disabled }: Props) {
   const { t, locale } = useI18n();
   const fmt = useFormatDate();
   const slotLabel = useTimeSlotLabel();
@@ -51,15 +52,24 @@ export function VoiceMark({ round, today, onApply, disabled }: Props) {
       const trimmed = raw.trim();
       if (!trimmed) return;
       setAppliedCount(null);
+      const markedCells = new Set<string>();
+      if (isMarked) {
+        for (const date of round.dates) {
+          for (const slot of round.timeSlots) {
+            if (isMarked(date, slot)) markedCells.add(`${date}__${slot}`);
+          }
+        }
+      }
       setPreview(
         parseAvailabilitySpeech(trimmed, {
           today,
           windowDates: round.dates,
           lang: locale,
+          markedCells,
         }),
       );
     },
-    [today, round.dates, locale],
+    [today, round.dates, round.timeSlots, locale, isMarked],
   );
 
   // Mirror live transcript into the field; auto-parse when listening stops.

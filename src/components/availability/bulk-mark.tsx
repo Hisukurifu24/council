@@ -14,6 +14,7 @@ import { useI18n, useTimeSlotLabel, useStatusLabel } from "@/lib/i18n";
 interface Props {
   round: SchedulingRound;
   disabled?: boolean;
+  isMarked?: (date: string, timeSlot: TimeSlot) => boolean;
   onApply: (
     cells: { date: string; timeSlot: TimeSlot }[],
     status: AvailabilityStatus,
@@ -22,6 +23,7 @@ interface Props {
 
 type DayFilter =
   | "all"
+  | "remaining"
   | "weekdays"
   | "weekends"
   | "0"
@@ -34,6 +36,7 @@ type DayFilter =
 
 const DAY_KEYS: { value: DayFilter; key: string }[] = [
   { value: "all", key: "bulk.day.all" },
+  { value: "remaining", key: "bulk.day.remaining" },
   { value: "weekdays", key: "bulk.day.weekdays" },
   { value: "weekends", key: "bulk.day.weekends" },
   { value: "1", key: "bulk.day.mon" },
@@ -52,7 +55,7 @@ const STATUS_OPTIONS: AvailabilityStatus[] = [
 ];
 
 function matchesDay(date: string, filter: DayFilter): boolean {
-  if (filter === "all") return true;
+  if (filter === "all" || filter === "remaining") return true;
   const dow = new Date(date + "T00:00:00").getDay();
   if (filter === "weekdays") return dow >= 1 && dow <= 5;
   if (filter === "weekends") return dow === 0 || dow === 6;
@@ -78,7 +81,7 @@ function Select({
   );
 }
 
-export function BulkMark({ round, disabled, onApply }: Props) {
+export function BulkMark({ round, disabled, isMarked, onApply }: Props) {
   const { t } = useI18n();
   const slotLabel = useTimeSlotLabel();
   const statusLabel = useStatusLabel();
@@ -92,6 +95,7 @@ export function BulkMark({ round, disabled, onApply }: Props) {
       if (!matchesDay(date, day)) continue;
       for (const slot of round.timeSlots) {
         if (time !== "all" && slot !== time) continue;
+        if (day === "remaining" && isMarked?.(date, slot)) continue;
         cells.push({ date, timeSlot: slot });
       }
     }

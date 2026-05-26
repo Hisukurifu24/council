@@ -194,11 +194,26 @@ function PlanInner() {
 
         {/* Voice / typed marking */}
         {myMemberId && (
-          <VoiceMark round={round} today={todayISO()} onApply={onBulk} />
+          <VoiceMark
+            round={round}
+            today={todayISO()}
+            onApply={onBulk}
+            isMarked={(date, slot) =>
+              statusFor(entries, myMemberId, date, slot) !== undefined
+            }
+          />
         )}
 
         {/* Bulk marking */}
-        {myMemberId && <BulkMark round={round} onApply={onBulk} />}
+        {myMemberId && (
+          <BulkMark
+            round={round}
+            onApply={onBulk}
+            isMarked={(date, slot) =>
+              statusFor(entries, myMemberId, date, slot) !== undefined
+            }
+          />
+        )}
 
         {/* The grid */}
         <AvailabilityGrid

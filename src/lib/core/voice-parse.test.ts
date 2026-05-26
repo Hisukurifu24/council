@@ -137,4 +137,54 @@ describe("parseAvailabilitySpeech", () => {
       { date: "2026-05-22", timeSlot: "afternoon", status: "unavailable" },
     ]);
   });
+
+  it("'busy for the remaining' fills only unmarked cells", () => {
+    const marked = new Set<string>([
+      "2026-05-21__morning",
+      "2026-05-21__afternoon",
+      "2026-05-21__evening",
+      "2026-05-22__morning",
+    ]);
+    const r = parseAvailabilitySpeech("busy for the remaining", {
+      today: TODAY,
+      windowDates: WINDOW,
+      markedCells: marked,
+    });
+    expect(r.matched).toBe(true);
+    // 35 days × 3 slots = 105 cells; 4 already marked → 101 left.
+    expect(r.slots).toHaveLength(105 - marked.size);
+    expect(r.slots.every((s) => s.status === "unavailable")).toBe(true);
+    expect(
+      r.slots.some(
+        (s) => s.date === "2026-05-21" && s.timeSlot === "morning",
+      ),
+    ).toBe(false);
+    expect(
+      r.slots.some(
+        (s) => s.date === "2026-05-22" && s.timeSlot === "afternoon",
+      ),
+    ).toBe(true);
+  });
+
+  it("Italian 'disponibile per il resto' works too", () => {
+    const marked = new Set<string>(["2026-05-23__evening"]);
+    const r = parseAvailabilitySpeech("disponibile per il resto", {
+      today: TODAY,
+      windowDates: WINDOW,
+      markedCells: marked,
+    });
+    expect(r.slots).toHaveLength(105 - 1);
+    expect(r.slots.every((s) => s.status === "available")).toBe(true);
+  });
+
+  it("'remaining mornings' respects time filter", () => {
+    const marked = new Set<string>(["2026-05-21__morning"]);
+    const r = parseAvailabilitySpeech("available for the remaining mornings", {
+      today: TODAY,
+      windowDates: WINDOW,
+      markedCells: marked,
+    });
+    expect(r.slots.every((s) => s.timeSlot === "morning")).toBe(true);
+    expect(r.slots).toHaveLength(35 - 1);
+  });
 });
