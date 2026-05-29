@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Wand2 } from "lucide-react";
+import { Check, ChevronDown, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AvailabilityStatus,
@@ -23,7 +23,6 @@ interface Props {
 
 type DayFilter =
   | "all"
-  | "remaining"
   | "weekdays"
   | "weekends"
   | "0"
@@ -36,7 +35,6 @@ type DayFilter =
 
 const DAY_KEYS: { value: DayFilter; key: string }[] = [
   { value: "all", key: "bulk.day.all" },
-  { value: "remaining", key: "bulk.day.remaining" },
   { value: "weekdays", key: "bulk.day.weekdays" },
   { value: "weekends", key: "bulk.day.weekends" },
   { value: "1", key: "bulk.day.mon" },
@@ -55,7 +53,7 @@ const STATUS_OPTIONS: AvailabilityStatus[] = [
 ];
 
 function matchesDay(date: string, filter: DayFilter): boolean {
-  if (filter === "all" || filter === "remaining") return true;
+  if (filter === "all") return true;
   const dow = new Date(date + "T00:00:00").getDay();
   if (filter === "weekdays") return dow >= 1 && dow <= 5;
   if (filter === "weekends") return dow === 0 || dow === 6;
@@ -88,6 +86,7 @@ export function BulkMark({ round, disabled, isMarked, onApply }: Props) {
   const [day, setDay] = React.useState<DayFilter>("all");
   const [time, setTime] = React.useState<TimeSlot | "all">("all");
   const [status, setStatus] = React.useState<AvailabilityStatus>("available");
+  const [onlyRemaining, setOnlyRemaining] = React.useState(false);
 
   const apply = () => {
     const cells: { date: string; timeSlot: TimeSlot }[] = [];
@@ -95,7 +94,7 @@ export function BulkMark({ round, disabled, isMarked, onApply }: Props) {
       if (!matchesDay(date, day)) continue;
       for (const slot of round.timeSlots) {
         if (time !== "all" && slot !== time) continue;
-        if (day === "remaining" && isMarked?.(date, slot)) continue;
+        if (onlyRemaining && isMarked?.(date, slot)) continue;
         cells.push({ date, timeSlot: slot });
       }
     }
@@ -151,6 +150,31 @@ export function BulkMark({ round, disabled, isMarked, onApply }: Props) {
           {t("common.apply")}
         </Button>
       </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={onlyRemaining}
+        onClick={() => setOnlyRemaining((v) => !v)}
+        disabled={disabled}
+        className={cn(
+          "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-all active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50",
+          onlyRemaining
+            ? "border-accent/60 bg-accent/15 text-accent shadow-glow"
+            : "border-border bg-background/40 text-muted-foreground hover:bg-secondary/60",
+        )}
+      >
+        <span
+          className={cn(
+            "flex h-4 w-4 items-center justify-center rounded-full border transition-colors",
+            onlyRemaining
+              ? "border-accent bg-accent text-accent-foreground"
+              : "border-muted-foreground/50",
+          )}
+        >
+          {onlyRemaining && <Check className="h-3 w-3" />}
+        </span>
+        {t("bulk.onlyRemaining")}
+      </button>
     </section>
   );
 }
