@@ -250,6 +250,7 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "grid.maybeFrag": ", {n} maybe",
     "grid.viableFrag": ", viable session",
     "grid.seeWhoVoted": "See who voted for {weekday} {day} {slot}",
+    "grid.bookSlot": "Book a session for {weekday} {day} {slot}",
 
     // Setup notice
     "setup.title": "Supabase isn't configured",
@@ -497,6 +498,7 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "grid.maybeFrag": ", {n} forse",
     "grid.viableFrag": ", sessione valida",
     "grid.seeWhoVoted": "Vedi chi ha votato per {weekday} {day} {slot}",
+    "grid.bookSlot": "Prenota una sessione per {weekday} {day} {slot}",
 
     // Setup notice
     "setup.title": "Supabase non è configurato",

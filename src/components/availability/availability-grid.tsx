@@ -22,6 +22,9 @@ interface Props {
   canEdit: boolean;
   isPast?: (date: string, slot: TimeSlot) => boolean;
   onShowVoters?: (date: string, slot: TimeSlot) => void;
+  /** When provided (DM only), the corner badge on viable/best/backup cells
+   *  becomes a tap target to book a session for that slot. */
+  onBook?: (date: string, slot: TimeSlot) => void;
 }
 
 // Cell background reflects *your* personal status only, so a glance answers
@@ -48,6 +51,7 @@ export function AvailabilityGrid({
   canEdit,
   isPast,
   onShowVoters,
+  onBook,
 }: Props) {
   const { t } = useI18n();
   const fmt = useFormatDate();
@@ -253,7 +257,7 @@ export function AvailabilityGrid({
                       }
                     }}
                     className={cn(
-                      "relative flex h-16 flex-col items-center justify-center pt-2 rounded-xl border transition-all",
+                      "relative flex h-16 flex-col items-center justify-center pt-2 pb-2 rounded-xl border transition-all",
                       past
                         ? "cursor-default opacity-35"
                         : canEdit
@@ -273,15 +277,59 @@ export function AvailabilityGrid({
                       borderWidth: mine && !past ? 2 : 1,
                     }}
                   >
-                    {!past && isBest && (
-                      <Crown className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-primary p-0.5 text-primary-foreground" />
-                    )}
-                    {!past && isBackup && !isBest && (
-                      <Star className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-accent p-0.5 text-accent-foreground" />
-                    )}
-                    {!past && isViable && !isBest && !isBackup && (
-                      <Check className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-[hsl(var(--avail))] p-0.5 text-background" />
-                    )}
+                    {/* corner badge marks best (crown) / backup (star) /
+                        otherwise-viable (check). When the viewer is the DM,
+                        `onBook` makes it a tap target to book that slot;
+                        otherwise it is a decorative marker. */}
+                    {!past && (isBest || isBackup || isViable) && (() => {
+                      const Icon = isBest ? Crown : isBackup ? Star : Check;
+                      const badgeCls = isBest
+                        ? "bg-primary text-primary-foreground"
+                        : isBackup
+                          ? "bg-accent text-accent-foreground"
+                          : "bg-[hsl(var(--avail))] text-background";
+                      if (!onBook)
+                        return (
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full p-0.5",
+                              badgeCls,
+                            )}
+                          >
+                            <Icon className="h-full w-full" />
+                          </span>
+                        );
+                      return (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          aria-label={t("grid.bookSlot", {
+                            weekday,
+                            day,
+                            slot: slotLabel(slot),
+                          })}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onBook(date, slot);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onBook(date, slot);
+                            }
+                          }}
+                          className={cn(
+                            "absolute -top-2 -right-2 z-10 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full p-0.5 shadow-sm ring-2 ring-background/70 transition-transform hover:scale-110",
+                            badgeCls,
+                          )}
+                        >
+                          <Icon className="h-full w-full" />
+                        </span>
+                      );
+                    })()}
 
                     <div className="flex items-baseline gap-1 leading-none">
                       <span className="text-lg font-bold tabular-nums">
@@ -309,13 +357,12 @@ export function AvailabilityGrid({
 
                     {/* group meter — share of party by status: available
                         (green) → maybe (amber) → unavailable (red). The empty
-                        tail is "no response yet". Kept at the top edge so it
-                        stays visually separate from "your status" (the cell
-                        background + colored border). */}
+                        tail is "no response yet". Sits along the bottom edge,
+                        below the count and your-status icons. */}
                     {!past && partyTotal > 0 && (
                       <span
                         aria-hidden
-                        className="pointer-events-none absolute inset-x-1.5 top-1.5 flex h-1 overflow-hidden rounded-full bg-border/40"
+                        className="pointer-events-none mt-1.5 flex h-1 w-4/5 shrink-0 overflow-hidden rounded-full bg-border/40"
                       >
                         <span
                           className="block h-full"
@@ -341,8 +388,8 @@ export function AvailabilityGrid({
                       </span>
                     )}
 
-                    {/* "who voted" — sits above the meter at the top-left so
-                        the icon and bar read as one composite "group" widget */}
+                    {/* "who voted" — top-left affordance to open the per-slot
+                        voter breakdown */}
                     {!past && onShowVoters && (
                       <span
                         role="button"

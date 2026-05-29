@@ -32,7 +32,7 @@ import {
   setAvailability,
   setAvailabilityBulk,
 } from "@/lib/store";
-import { AvailabilityStatus, TimeSlot } from "@/lib/core/types";
+import { AvailabilityStatus, TimeSlot, slotKeyId } from "@/lib/core/types";
 import { SlotScore } from "@/lib/core/scoring";
 import { isSlotPast, todayISO } from "@/lib/utils";
 import { useI18n, useFormatDate, useTimeSlotLabel } from "@/lib/i18n";
@@ -227,6 +227,14 @@ function PlanInner() {
           isPast={isSlotPast}
           onShowVoters={(date, slot) =>
             setVotersSlot({ date, timeSlot: slot })
+          }
+          onBook={
+            isDM
+              ? (date, slot) => {
+                  const score = model.byCell.get(slotKeyId(date, slot));
+                  if (score) openConfirm(score);
+                }
+              : undefined
           }
         />
 

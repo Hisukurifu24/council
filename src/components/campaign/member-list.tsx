@@ -53,9 +53,12 @@ export function MemberList({
 }) {
   const { t } = useI18n();
   const totalCells = round ? round.dates.length * round.timeSlots.length : 0;
+  const windowDates = new Set(round?.dates ?? []);
   const respondedBy = (id: string) =>
     new Set(
-      entries.filter((e) => e.memberId === id).map((e) => `${e.date}${e.timeSlot}`),
+      entries
+        .filter((e) => e.memberId === id && windowDates.has(e.date))
+        .map((e) => `${e.date}${e.timeSlot}`),
     ).size;
 
   return (
