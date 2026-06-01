@@ -291,6 +291,7 @@ function dbError(e: unknown): string {
 
 export async function signUp(
   input: SignUpInput,
+  remember = true,
 ): Promise<{ account: Account } | { error: string }> {
   const email = input.email.trim().toLowerCase();
 
@@ -316,13 +317,17 @@ export async function signUp(
   } catch (e) {
     return { error: dbError(e) };
   }
-  setCurrentAccount({ id: account.id, email, displayName: account.displayName });
+  setCurrentAccount(
+    { id: account.id, email, displayName: account.displayName },
+    remember,
+  );
   touch();
   return { account };
 }
 
 export async function logIn(
   input: LogInInput,
+  remember = true,
 ): Promise<{ account: Account } | { error: string }> {
   const email = input.email.trim().toLowerCase();
 
@@ -337,11 +342,14 @@ export async function logIn(
   if (hash !== existing.passwordHash) return { error: "Incorrect password." };
 
   api.upsertAccount(existing);
-  setCurrentAccount({
-    id: existing.id,
-    email: existing.email,
-    displayName: existing.displayName,
-  });
+  setCurrentAccount(
+    {
+      id: existing.id,
+      email: existing.email,
+      displayName: existing.displayName,
+    },
+    remember,
+  );
   try {
     await ensureAccountCampaigns();
   } catch {

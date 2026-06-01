@@ -45,16 +45,26 @@ export async function hashPassword(
 export function getCurrentAccount(): AuthSession | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(AUTH_KEY);
+    // "Remember me" → localStorage (survives browser restart); otherwise
+    // sessionStorage (cleared when the tab/browser closes).
+    const raw =
+      localStorage.getItem(AUTH_KEY) ?? sessionStorage.getItem(AUTH_KEY);
     return raw ? (JSON.parse(raw) as AuthSession) : null;
   } catch {
     return null;
   }
 }
 
-export function setCurrentAccount(session: AuthSession) {
+export function setCurrentAccount(session: AuthSession, remember = true) {
   try {
-    localStorage.setItem(AUTH_KEY, JSON.stringify(session));
+    const value = JSON.stringify(session);
+    if (remember) {
+      localStorage.setItem(AUTH_KEY, value);
+      sessionStorage.removeItem(AUTH_KEY);
+    } else {
+      sessionStorage.setItem(AUTH_KEY, value);
+      localStorage.removeItem(AUTH_KEY);
+    }
   } catch {
     /* ignore */
   }
@@ -63,6 +73,7 @@ export function setCurrentAccount(session: AuthSession) {
 export function clearCurrentAccount() {
   try {
     localStorage.removeItem(AUTH_KEY);
+    sessionStorage.removeItem(AUTH_KEY);
   } catch {
     /* ignore */
   }

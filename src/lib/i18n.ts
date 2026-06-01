@@ -184,6 +184,7 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "auth.logIn": "Log in",
     "auth.toLogin": "Already have an account? Log in",
     "auth.toSignup": "New here? Create an account",
+    "auth.rememberMe": "Remember me",
 
     // Invite
     "invite.title": "Invite your party",
@@ -432,6 +433,7 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "auth.logIn": "Accedi",
     "auth.toLogin": "Hai già un account? Accedi",
     "auth.toSignup": "Sei nuovo? Crea un account",
+    "auth.rememberMe": "Ricordami",
 
     // Invite
     "invite.title": "Invita la tua compagnia",

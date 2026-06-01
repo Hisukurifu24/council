@@ -36,6 +36,7 @@ export function AuthForm({ onAuthed }: { onAuthed?: () => void }) {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [displayName, setDisplayName] = React.useState("");
+  const [remember, setRemember] = React.useState(true);
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
@@ -56,8 +57,8 @@ export function AuthForm({ onAuthed }: { onAuthed?: () => void }) {
     setBusy(true);
     try {
       const res = isSignup
-        ? await signUp(parsed.data as Parameters<typeof signUp>[0])
-        : await logIn(parsed.data as Parameters<typeof logIn>[0]);
+        ? await signUp(parsed.data as Parameters<typeof signUp>[0], remember)
+        : await logIn(parsed.data as Parameters<typeof logIn>[0], remember);
       if ("error" in res) {
         setError(res.error);
         return;
@@ -123,6 +124,16 @@ export function AuthForm({ onAuthed }: { onAuthed?: () => void }) {
             autoComplete={isSignup ? "new-password" : "current-password"}
           />
         </div>
+
+        <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            className="h-4 w-4 cursor-pointer accent-accent"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+          />
+          {t("auth.rememberMe")}
+        </label>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
