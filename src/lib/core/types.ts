@@ -11,6 +11,13 @@ export const TIME_SLOT_LABELS: Record<TimeSlot, string> = {
   evening: "Evening",
 };
 
+// Local clock-time mapping for calendar exports (24h). Evening ends at midnight.
+export const SLOT_HOURS: Record<TimeSlot, { startHour: number; endHour: number }> = {
+  morning: { startHour: 9, endHour: 12 },
+  afternoon: { startHour: 14, endHour: 18 },
+  evening: { startHour: 21, endHour: 24 },
+};
+
 export type AvailabilityStatus = "available" | "maybe" | "unavailable";
 
 export type MemberRole = "dm" | "player";

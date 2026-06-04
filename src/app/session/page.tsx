@@ -3,7 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarCheck, Lock, NotebookPen, Trash2, Users } from "lucide-react";
+import {
+  CalendarCheck,
+  CalendarPlus,
+  Download,
+  ExternalLink,
+  Lock,
+  NotebookPen,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +21,12 @@ import { VoterBreakdown } from "@/components/availability/voter-breakdown";
 import { useCampaign, useEnsureCampaign, useMounted } from "@/lib/hooks";
 import { cancelSession, getSession } from "@/lib/store";
 import { useI18n, useFormatDate, useTimeSlotLabel } from "@/lib/i18n";
+import {
+  buildCalendarEvent,
+  googleCalendarUrl,
+  toIcsString,
+} from "@/lib/core/calendar";
+import { downloadTextFile } from "@/lib/utils";
 
 function SessionInner() {
   const { t } = useI18n();
@@ -47,6 +62,14 @@ function SessionInner() {
   };
 
   const { weekday, day } = fmt(session.date);
+  const calEvent = buildCalendarEvent(session, bundle.campaign.name);
+
+  const downloadIcs = () =>
+    downloadTextFile(
+      `council-session-${session.id}.ics`,
+      "text/calendar",
+      toIcsString(calEvent),
+    );
 
   return (
     <AppShell title={bundle.campaign.name} back={`/campaign/?code=${code}`}>
@@ -94,6 +117,35 @@ function SessionInner() {
             hostId={bundle.campaign.hostId}
           />
         </section>
+
+        {!isCanceled && (
+          <section>
+            <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
+              <CalendarPlus className="h-4 w-4" /> {t("session.addToCalendar")}
+            </h2>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={downloadIcs}
+              >
+                <Download className="h-4 w-4" />
+                {t("session.downloadIcs")}
+              </Button>
+              <a
+                href={googleCalendarUrl(calEvent)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1"
+              >
+                <Button variant="secondary" className="w-full">
+                  <ExternalLink className="h-4 w-4" />
+                  {t("session.googleCalendar")}
+                </Button>
+              </a>
+            </div>
+          </section>
+        )}
 
         <Link href={`/plan/?code=${code}`} className="block">
           <Button variant="outline" className="w-full">

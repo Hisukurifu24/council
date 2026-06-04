@@ -5,6 +5,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Trigger a client-side download of a text payload (e.g. an .ics file). */
+export function downloadTextFile(filename: string, mime: string, content: string) {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 export function randomId(prefix = ""): string {
