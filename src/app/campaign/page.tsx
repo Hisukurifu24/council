@@ -36,6 +36,7 @@ import {
   updateMinPlayers,
 } from "@/lib/store";
 import { useI18n, useFormatDate, useTimeSlotLabel } from "@/lib/i18n";
+import { isSlotPast } from "@/lib/utils";
 
 function CampaignInner() {
   const { t } = useI18n();
@@ -95,6 +96,10 @@ function CampaignInner() {
   };
 
   const confirmed = sessions.filter((s) => s.status === "confirmed");
+  const upcoming = confirmed.filter((s) => !isSlotPast(s.date, s.timeSlot));
+  const past = confirmed
+    .filter((s) => isSlotPast(s.date, s.timeSlot))
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
   return (
     <AppShell
@@ -212,14 +217,14 @@ function CampaignInner() {
           </Link>
         )}
 
-        {/* Confirmed sessions */}
-        {confirmed.length > 0 && (
+        {/* Upcoming confirmed sessions */}
+        {upcoming.length > 0 && (
           <section>
             <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
               {t("campaign.bookedSessions")}
             </h2>
             <ul className="space-y-2">
-              {confirmed.map((s) => {
+              {upcoming.map((s) => {
                 const { weekday, day } = fmt(s.date);
                 return (
                   <li key={s.id}>
@@ -240,6 +245,42 @@ function CampaignInner() {
                           </div>
                         </div>
                         <Badge variant="avail">{t("campaign.locked")}</Badge>
+                      </Card>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        {/* Session history (past sessions) */}
+        {past.length > 0 && (
+          <section>
+            <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
+              {t("campaign.sessionHistory")}
+            </h2>
+            <ul className="space-y-2">
+              {past.map((s) => {
+                const { weekday, day } = fmt(s.date);
+                return (
+                  <li key={s.id}>
+                    <Link
+                      href={`/session/?code=${campaign.inviteCode}&id=${s.id}`}
+                      className="block"
+                    >
+                      <Card className="flex items-center gap-3 p-3 opacity-70 transition-all hover:border-primary/60 hover:opacity-100">
+                        <div className="rounded-xl bg-muted p-2 text-muted-foreground">
+                          <CalendarCheck className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-medium">
+                            {weekday} {day} · {slotLabel(s.timeSlot)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {t("campaign.played")}
+                          </div>
+                        </div>
                       </Card>
                     </Link>
                   </li>
