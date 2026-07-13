@@ -61,6 +61,11 @@ let snapshot: DB = EMPTY_DB;
 let hydrated = false;
 const listeners = new Set<() => void>();
 
+// Per-cell write queue. Rapid taps on one cell fire several upserts; chaining
+// them guarantees they commit in tap order, so the backend lands on the value
+// of the last tap rather than whichever request happens to arrive last.
+const availWriteChains = new Map<string, Promise<unknown>>();
+
 let backend: Backend = new SupabaseBackend();
 
 function emit() {
@@ -111,12 +116,16 @@ const api: StoreApi = {
     emit();
   },
   upsertAvailability: (e) => {
+    const key = avKey(e.roundId, e.memberId, e.date, e.timeSlot);
+    const existing = snapshot.availability[key];
+    // Last-write-wins: ignore a stale row. Rapid taps fire several optimistic
+    // writes whose Realtime echoes can arrive out of order; without this guard a
+    // delayed echo of an earlier tap reverts the cell, making the UI look out of
+    // sync with the backend. A newer remote edit (later timestamp) still wins.
+    if (existing && e.updatedAt < existing.updatedAt) return;
     snapshot = {
       ...snapshot,
-      availability: {
-        ...snapshot.availability,
-        [avKey(e.roundId, e.memberId, e.date, e.timeSlot)]: e,
-      },
+      availability: { ...snapshot.availability, [key]: e },
     };
     emit();
   },
@@ -518,7 +527,15 @@ export function setAvailability(
   };
   api.upsertAvailability(entry);
   const member = snapshot.members[memberId];
-  void backend.persistSetAvailability(entry, member);
+  // Serialize writes to this cell so a burst of taps commits in order.
+  const prev = availWriteChains.get(key) ?? Promise.resolve();
+  const next = prev
+    .catch(() => {})
+    .then(() => backend.persistSetAvailability(entry, member));
+  availWriteChains.set(key, next);
+  void next.finally(() => {
+    if (availWriteChains.get(key) === next) availWriteChains.delete(key);
+  });
 }
 
 /**
