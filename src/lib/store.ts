@@ -73,6 +73,16 @@ function emit() {
 }
 
 /**
+ * Epoch millis for an ISO timestamp. Accepts both the client's `…Z` form and
+ * the `…+00:00` form Postgres returns, which do not compare correctly as
+ * strings even though both are UTC.
+ */
+function timeOf(iso: string): number {
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/**
  * Force a new snapshot reference + emit. Used when state that lives outside the
  * snapshot changes (e.g. the auth session in localStorage) so subscribers
  * relying on snapshot identity (useSyncExternalStore) actually re-render.
@@ -118,11 +128,21 @@ const api: StoreApi = {
   upsertAvailability: (e) => {
     const key = avKey(e.roundId, e.memberId, e.date, e.timeSlot);
     const existing = snapshot.availability[key];
-    // Last-write-wins: ignore a stale row. Rapid taps fire several optimistic
-    // writes whose Realtime echoes can arrive out of order; without this guard a
-    // delayed echo of an earlier tap reverts the cell, making the UI look out of
-    // sync with the backend. A newer remote edit (later timestamp) still wins.
-    if (existing && e.updatedAt < existing.updatedAt) return;
+    // Reconciliation path only (initial load + Realtime); local taps go straight
+    // into the snapshot from `setAvailability`.
+    //
+    // Rapid taps fire several writes whose echoes can arrive out of order, and a
+    // delayed echo of an earlier tap would revert the cell. A cell belongs to
+    // exactly one member, so this user is its only writer: while one of our own
+    // writes is still in flight, no echo can be newer than what we already have.
+    // Otherwise fall back to last-write-wins, comparing instants rather than
+    // strings — Postgres renders the timestamp as `+00:00` where the client
+    // sends `Z`, and `"+" < "Z"` byte-wise, so string compare reads an echo of
+    // our own write as older than the write itself.
+    if (existing) {
+      if (availWriteChains.has(key)) return;
+      if (timeOf(e.updatedAt) < timeOf(existing.updatedAt)) return;
+    }
     snapshot = {
       ...snapshot,
       availability: { ...snapshot.availability, [key]: e },
@@ -525,7 +545,15 @@ export function setAvailability(
     status,
     updatedAt: new Date().toISOString(),
   };
-  api.upsertAvailability(entry);
+  // A tap is the local truth, so apply it directly rather than through
+  // `upsertAvailability` — that path is reconciliation and drops anything not
+  // newer than what's stored, which silently swallowed the tap whenever the
+  // stored row carried a timestamp ahead of this device's clock.
+  snapshot = {
+    ...snapshot,
+    availability: { ...snapshot.availability, [key]: entry },
+  };
+  emit();
   const member = snapshot.members[memberId];
   // Serialize writes to this cell so a burst of taps commits in order.
   const prev = availWriteChains.get(key) ?? Promise.resolve();

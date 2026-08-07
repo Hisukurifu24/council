@@ -89,15 +89,43 @@ export class SupabaseBackend implements Backend {
     const round = rounds?.[0] ? rowToRound(rounds[0]) : undefined;
     if (round) {
       this.api.upsertRound(round);
-      const { data: entries } = await sb
-        .from("availability_entries")
-        .select("*")
-        .eq("round_id", round.id);
-      entries?.forEach((e) => this.api.upsertAvailability(rowToEntry(e)));
+      const entries = await this.loadEntries(round.id);
+      entries.forEach((e) => this.api.upsertAvailability(e));
     }
     sessions?.forEach((s) => this.api.upsertSession(rowToSession(s)));
 
     this.subscribeCampaign(campaign.id, round?.id);
+  }
+
+  /**
+   * Every availability row for a round.
+   *
+   * A plain select can't be used here: PostgREST caps a response at
+   * `db-max-rows` (1000 on Supabase) and truncates silently — no error, no
+   * flag. A campaign accumulates a row per member × date × slot, so once it
+   * passes 1000 the load starts dropping rows, and because the cap applies to
+   * an unordered result the rows lost are arbitrary. That reads as
+   * "availability saves, then disappears on refresh". Page through instead,
+   * ordering by id so the pages tile the result exactly.
+   */
+  private async loadEntries(roundId: string): Promise<AvailabilityEntry[]> {
+    const sb = this.sb;
+    if (!sb) return [];
+    const pageSize = 1000;
+    const all: AvailabilityEntry[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await sb
+        .from("availability_entries")
+        .select("*")
+        .eq("round_id", roundId)
+        .order("id")
+        .range(from, from + pageSize - 1);
+      check("load availability", error);
+      if (!data?.length) break;
+      all.push(...data.map(rowToEntry));
+      if (data.length < pageSize) break;
+    }
+    return all;
   }
 
   async ensureAccountCampaigns(accountId: string) {
