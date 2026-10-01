@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Council: a d20 in the app's arcane purple + amber on the dark-fantasy background -->
+  <rect width="64" height="64" rx="14" fill="#0d0a1a"/>
+  <g stroke="#0d0a1a" stroke-width="1.6" stroke-linejoin="round">
+    <polygon points="32,7 53.6,19.5 53.6,44.5 32,57 10.4,44.5 10.4,19.5" fill="#5b34b0"/>
+    <polygon points="32,7 53.6,19.5 32,20" fill="#7c4fe0"/>
+    <polygon points="32,7 10.4,19.5 32,20" fill="#8a5ef0"/>
+    <polygon points="32,20 46,42 18,42" fill="#fab338"/>
+    <polygon points="18,42 46,42 32,57" fill="#4a2a94"/>
+    <path d="M32 20 L53.6 19.5 L46 42 L53.6 44.5 M32 20 L10.4 19.5 L18 42 L10.4 44.5" fill="none"/>
+  </g>
+</svg>
