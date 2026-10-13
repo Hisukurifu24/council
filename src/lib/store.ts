@@ -156,7 +156,12 @@ const api: StoreApi = {
   removeMember: (id) => {
     const members = { ...snapshot.members };
     delete members[id];
-    snapshot = { ...snapshot, members };
+    // Mirror the database cascade: a removed member's availability goes too.
+    const availability = { ...snapshot.availability };
+    for (const [key, e] of Object.entries(availability)) {
+      if (e.memberId === id) delete availability[key];
+    }
+    snapshot = { ...snapshot, members, availability };
     emit();
   },
   removeCampaign: (id) => {
@@ -449,6 +454,7 @@ export function createCampaign(input: CreateCampaignInput): {
       weights: DEFAULT_WEIGHTS,
       timeSlots: [...TIME_SLOTS],
       minPlayers: input.minPlayers,
+      banned: [],
     },
     archivedAt: null,
     createdAt: now,
@@ -501,14 +507,116 @@ export function deleteCampaign(campaignId: string) {
   void backend.persistDeleteCampaign(campaignId);
 }
 
+/** A non-DM member of the campaign, or undefined (the DM can't be managed). */
+function managedMember(campaignId: string, memberId: string) {
+  const campaign = snapshot.campaigns[campaignId];
+  const member = snapshot.members[memberId];
+  if (!campaign || !member || member.campaignId !== campaignId) return undefined;
+  if (memberId === campaign.hostId) return undefined;
+  return { campaign, member };
+}
+
+/**
+ * DM-only: remove a player from the campaign. Their availability is deleted
+ * with them; they can rejoin with the invite code.
+ */
+export function kickMember(campaignId: string, memberId: string) {
+  if (!managedMember(campaignId, memberId)) return;
+  api.removeMember(memberId);
+  void backend.persistRemoveMember(memberId);
+}
+
+/** DM-only: remove a player and stop their account from rejoining. */
+export function banMember(campaignId: string, memberId: string) {
+  const found = managedMember(campaignId, memberId);
+  if (!found) return;
+  const { campaign, member } = found;
+  if (member.accountId && !campaign.settings.banned.some((b) => b.accountId === member.accountId)) {
+    const updated: Campaign = {
+      ...campaign,
+      settings: {
+        ...campaign.settings,
+        banned: [
+          ...campaign.settings.banned,
+          {
+            accountId: member.accountId,
+            name: member.guestName ?? "",
+            bannedAt: new Date().toISOString(),
+          },
+        ],
+      },
+    };
+    api.upsertCampaign(updated);
+    void backend.persistUpdateCampaign(updated);
+  }
+  kickMember(campaignId, memberId);
+}
+
+/** DM-only: lift a ban so the account can join again. */
+export function unbanAccount(campaignId: string, accountId: string) {
+  const campaign = snapshot.campaigns[campaignId];
+  if (!campaign) return;
+  const updated: Campaign = {
+    ...campaign,
+    settings: {
+      ...campaign.settings,
+      banned: campaign.settings.banned.filter((b) => b.accountId !== accountId),
+    },
+  };
+  api.upsertCampaign(updated);
+  void backend.persistUpdateCampaign(updated);
+}
+
+/** DM-only: hand the DM role to another member; the current DM becomes a player. */
+export function transferHost(campaignId: string, memberId: string) {
+  const found = managedMember(campaignId, memberId);
+  if (!found) return;
+  const { campaign, member } = found;
+  const oldHost = snapshot.members[campaign.hostId];
+  const updated: Campaign = { ...campaign, hostId: memberId };
+  const newHost: CampaignMember = { ...member, role: "dm" };
+  api.upsertCampaign(updated);
+  api.upsertMember(newHost);
+  void backend.persistUpdateCampaign(updated);
+  void backend.persistUpdateMember(newHost);
+  if (oldHost) {
+    const demoted: CampaignMember = { ...oldHost, role: "player" };
+    api.upsertMember(demoted);
+    void backend.persistUpdateMember(demoted);
+  }
+}
+
+/** True when the logged-in account is on the campaign's ban list. */
+export function isBanned(campaignId: string): boolean {
+  const acct = getCurrentAccount();
+  const campaign = snapshot.campaigns[campaignId];
+  if (!acct || !campaign) return false;
+  return campaign.settings.banned.some((b) => b.accountId === acct.id);
+}
+
+/**
+ * Join from the UI. Re-reads the campaign first so a ban issued while this page
+ * was open is honoured even without campaign Realtime. Returns null if banned.
+ */
+export async function joinCampaign(
+  code: string,
+  name: string,
+): Promise<CampaignMember | null> {
+  await ensureCampaign(code);
+  const campaign = getCampaignByCode(code);
+  if (!campaign) return null;
+  return joinAsGuest(campaign.id, name);
+}
+
 export function joinAsGuest(
   campaignId: string,
   name: string,
-): CampaignMember {
+): CampaignMember | null {
   const existingId = getMyMemberId(campaignId);
   if (existingId && snapshot.members[existingId]) {
     return snapshot.members[existingId];
   }
+  if (isBanned(campaignId)) return null;
   const now = new Date().toISOString();
   const id = randomId("");
   const count = getMembers(campaignId).length;

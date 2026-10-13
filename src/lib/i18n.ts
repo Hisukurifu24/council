@@ -209,6 +209,29 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "members.player": "Player",
     "members.dm": "DM",
 
+    // Member management (DM)
+    "manage.title": "Manage player",
+    "manage.open": "Manage {name}",
+    "manage.host": "Make DM",
+    "manage.hostDesc": "Hand over the DM role. You'll become a player.",
+    "manage.hostConfirm":
+      "Make {name} the DM? You'll become a player and lose the DM controls for this campaign.",
+    "manage.hostCta": "Make DM",
+    "manage.kick": "Remove from campaign",
+    "manage.kickDesc": "They can rejoin with the invite code.",
+    "manage.kickConfirm":
+      "Remove {name} from the campaign? Their availability will be deleted. They can rejoin with the invite code.",
+    "manage.kickCta": "Remove",
+    "manage.ban": "Ban",
+    "manage.banDesc": "Remove them and block their account from rejoining.",
+    "manage.banConfirm":
+      "Ban {name}? They'll be removed, their availability deleted, and their account won't be able to rejoin until you lift the ban.",
+    "manage.banCta": "Ban",
+    "campaign.banned": "Banned ({n})",
+    "campaign.unban": "Unban",
+    "campaign.bannedTitle": "You can't join this campaign",
+    "campaign.bannedDesc": "The DM has banned your account from this campaign.",
+
     // Recommendations
     "rec.best": "Best session time",
     "rec.backup": "Good backup",
@@ -462,6 +485,29 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "members.marked": "{n}/{total} segnati",
     "members.player": "Giocatore",
     "members.dm": "DM",
+
+    // Gestione membri (DM)
+    "manage.title": "Gestisci giocatore",
+    "manage.open": "Gestisci {name}",
+    "manage.host": "Rendi DM",
+    "manage.hostDesc": "Cedi il ruolo di DM. Diventerai un giocatore.",
+    "manage.hostConfirm":
+      "Rendere {name} il DM? Diventerai un giocatore e perderai i controlli da DM per questa campagna.",
+    "manage.hostCta": "Rendi DM",
+    "manage.kick": "Rimuovi dalla campagna",
+    "manage.kickDesc": "Potrà rientrare con il codice invito.",
+    "manage.kickConfirm":
+      "Rimuovere {name} dalla campagna? La sua disponibilità verrà cancellata. Potrà rientrare con il codice invito.",
+    "manage.kickCta": "Rimuovi",
+    "manage.ban": "Banna",
+    "manage.banDesc": "Rimuovilo e impedisci al suo account di rientrare.",
+    "manage.banConfirm":
+      "Bannare {name}? Verrà rimosso, la sua disponibilità cancellata, e il suo account non potrà rientrare finché non revochi il ban.",
+    "manage.banCta": "Banna",
+    "campaign.banned": "Bannati ({n})",
+    "campaign.unban": "Revoca ban",
+    "campaign.bannedTitle": "Non puoi entrare in questa campagna",
+    "campaign.bannedDesc": "Il DM ha bannato il tuo account da questa campagna.",
 
     // Recommendations
     "rec.best": "Miglior orario sessione",

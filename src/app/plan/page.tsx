@@ -28,7 +28,8 @@ import {
 } from "@/lib/hooks";
 import {
   confirmSession,
-  joinAsGuest,
+  isBanned,
+  joinCampaign,
   setAvailability,
   setAvailabilityBulk,
 } from "@/lib/store";
@@ -69,22 +70,34 @@ function PlanInner() {
 
   const isDM = myMemberId === campaign.hostId;
 
-  // Join gate
+  // Join gate (banned accounts get a notice instead)
   if (mounted && !myMemberId) {
+    const banned = isBanned(campaign.id);
     return (
       <AppShell title={campaign.name} back={`/campaign/?code=${code}`}>
-        <Card className="border-primary/50">
+        <Card className={banned ? "border-destructive/50" : "border-primary/50"}>
           <CardContent className="pt-4">
-            <div className="mb-2 font-medium">{t("plan.joinTitle")}</div>
-            <p className="mb-3 text-sm text-muted-foreground">
-              {t("campaign.joinAs", { name: account?.displayName ?? "" })}
-            </p>
-            <Button
-              className="w-full"
-              onClick={() => account && joinAsGuest(campaign.id, account.displayName)}
-            >
-              {t("campaign.joinCta")}
-            </Button>
+            {banned ? (
+              <>
+                <div className="mb-2 font-medium">{t("campaign.bannedTitle")}</div>
+                <p className="text-sm text-muted-foreground">
+                  {t("campaign.bannedDesc")}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="mb-2 font-medium">{t("plan.joinTitle")}</div>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  {t("campaign.joinAs", { name: account?.displayName ?? "" })}
+                </p>
+                <Button
+                  className="w-full"
+                  onClick={() => account && void joinCampaign(code, account.displayName)}
+                >
+                  {t("campaign.joinCta")}
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       </AppShell>

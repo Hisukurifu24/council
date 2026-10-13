@@ -46,6 +46,14 @@ export interface CampaignSettings {
   weights: ScoringWeights;
   timeSlots: TimeSlot[];
   minPlayers: number; // min available players (excluding the DM) for a viable session
+  banned: BannedAccount[]; // accounts the DM banned; they can't rejoin
+}
+
+/** An account the DM banned from a campaign. Enforced in the UI only. */
+export interface BannedAccount {
+  accountId: string;
+  name: string; // display name at ban time, shown in the unban list
+  bannedAt: string;
 }
 
 export interface ScoringWeights {

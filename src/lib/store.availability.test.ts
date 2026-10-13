@@ -39,6 +39,8 @@ class FakeBackend implements Backend {
   persistUpdateCampaign = noop;
   persistDeleteCampaign = noop;
   persistJoinMember = noop;
+  persistUpdateMember = noop;
+  persistRemoveMember = noop;
   /** Echo back what Postgres would return, like Realtime does. */
   persistSetAvailability = async (entry: AvailabilityEntry, _m?: CampaignMember) => {
     echoes.push({ ...entry, updatedAt: asPgTimestamp(entry.updatedAt) });

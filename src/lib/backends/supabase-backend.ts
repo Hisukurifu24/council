@@ -85,7 +85,15 @@ export class SupabaseBackend implements Backend {
         sb.from("sessions").select("*").eq("campaign_id", campaign.id),
       ]);
 
-    members?.forEach((m) => this.api.upsertMember(rowToMember(m)));
+    if (members) {
+      // Drop members removed (kicked/banned) since we last loaded this campaign;
+      // the DELETE may have happened while we weren't subscribed.
+      const live = new Set(members.map((m: { id: string }) => m.id));
+      for (const m of Object.values(this.api.getSnapshot().members)) {
+        if (m.campaignId === campaign.id && !live.has(m.id)) this.api.removeMember(m.id);
+      }
+      members.forEach((m) => this.api.upsertMember(rowToMember(m)));
+    }
     const round = rounds?.[0] ? rowToRound(rounds[0]) : undefined;
     if (round) {
       this.api.upsertRound(round);
@@ -181,24 +189,45 @@ export class SupabaseBackend implements Backend {
 
     const ch = sb.channel(`campaign:${campaignId}`);
 
+    // Only applies once `campaigns` is in the realtime publication (0003);
+    // carries host transfers and ban-list changes to other clients live.
+    ch.on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "campaigns", filter: `id=eq.${campaignId}` },
+      (p) => this.api.upsertCampaign(rowToCampaign(p.new)),
+    );
     ch.on(
       "postgres_changes",
       { event: "*", schema: "public", table: "campaign_members", filter: `campaign_id=eq.${campaignId}` },
       (p) => {
-        if (p.eventType === "DELETE") this.api.removeMember((p.old as { id: string }).id);
-        else this.api.upsertMember(rowToMember(p.new));
+        if (p.eventType !== "DELETE") this.api.upsertMember(rowToMember(p.new));
       },
     );
+    // Postgres can't filter DELETE events (the old row carries only the primary
+    // key), so listen unfiltered and ignore ids that aren't in our snapshot.
+    ch.on(
+      "postgres_changes",
+      { event: "DELETE", schema: "public", table: "campaign_members" },
+      (p) => {
+        const id = (p.old as { id?: string }).id;
+        if (id && this.api.getSnapshot().members[id]) this.api.removeMember(id);
+      },
+    );
+    // DELETE payloads carry `new: {}`, which is truthy — skip them explicitly.
     ch.on(
       "postgres_changes",
       { event: "*", schema: "public", table: "sessions", filter: `campaign_id=eq.${campaignId}` },
-      (p) => p.new && this.api.upsertSession(rowToSession(p.new)),
+      (p) => {
+        if (p.eventType !== "DELETE") this.api.upsertSession(rowToSession(p.new));
+      },
     );
     if (roundId) {
       ch.on(
         "postgres_changes",
         { event: "*", schema: "public", table: "availability_entries", filter: `round_id=eq.${roundId}` },
-        (p) => p.new && this.api.upsertAvailability(rowToEntry(p.new)),
+        (p) => {
+          if (p.eventType !== "DELETE") this.api.upsertAvailability(rowToEntry(p.new));
+        },
       );
     }
     ch.subscribe();
@@ -236,6 +265,7 @@ export class SupabaseBackend implements Backend {
       .update({
         name: campaign.name,
         description: campaign.description ?? null,
+        host_id: campaign.hostId,
         settings: campaign.settings,
       })
       .eq("id", campaign.id);
@@ -259,6 +289,24 @@ export class SupabaseBackend implements Backend {
       .insert(memberToRow(member));
     check("insert member", error);
     this.subscribeCampaign(member.campaignId);
+  }
+
+  async persistUpdateMember(member: CampaignMember) {
+    const sb = this.sb;
+    if (!sb) return;
+    const { error } = await sb
+      .from("campaign_members")
+      .update({ guest_name: member.guestName ?? null, role: member.role })
+      .eq("id", member.id);
+    check("update member", error);
+  }
+
+  async persistRemoveMember(memberId: string) {
+    const sb = this.sb;
+    if (!sb) return;
+    // Their availability cascades; sessions they confirmed keep confirmed_by = null.
+    const { error } = await sb.from("campaign_members").delete().eq("id", memberId);
+    check("delete member", error);
   }
 
   async persistSetAvailability(entry: AvailabilityEntry) {

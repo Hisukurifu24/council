@@ -13,6 +13,7 @@ import {
   Users,
   Pencil,
   Trash2,
+  Ban,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthGate } from "@/components/auth/auth-gate";
@@ -23,6 +24,8 @@ import { Modal } from "@/components/ui/modal";
 import { Input, Label } from "@/components/ui/input";
 import { MemberList } from "@/components/campaign/member-list";
 import { InviteSheet } from "@/components/campaign/invite-sheet";
+import { ManageMemberSheet } from "@/components/campaign/manage-member-sheet";
+import { CampaignMember } from "@/lib/core/types";
 import {
   useCampaign,
   useCurrentAccount,
@@ -31,8 +34,10 @@ import {
 } from "@/lib/hooks";
 import {
   deleteCampaign,
-  joinAsGuest,
+  isBanned,
+  joinCampaign,
   renameCampaign,
+  unbanAccount,
   updateMinPlayers,
 } from "@/lib/store";
 import { useI18n, useFormatDate, useTimeSlotLabel } from "@/lib/i18n";
@@ -52,6 +57,8 @@ function CampaignInner() {
   const [renaming, setRenaming] = React.useState(false);
   const [nameDraft, setNameDraft] = React.useState("");
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [managing, setManaging] = React.useState<CampaignMember | null>(null);
+  const [joining, setJoining] = React.useState(false);
 
   const { campaign, members, round, sessions, myMemberId } = bundle;
 
@@ -73,10 +80,16 @@ function CampaignInner() {
   if (!campaign) return <AppShell title={t("campaign.title")} back="/" />;
 
   const isDM = myMemberId === campaign.hostId;
+  const banned = mounted && !myMemberId && isBanned(campaign.id);
 
-  const join = () => {
+  const join = async () => {
     if (!account) return;
-    joinAsGuest(campaign.id, account.displayName);
+    setJoining(true);
+    try {
+      await joinCampaign(code, account.displayName);
+    } finally {
+      setJoining(false);
+    }
   };
 
   const openRename = () => {
@@ -121,8 +134,23 @@ function CampaignInner() {
           <p className="text-sm text-muted-foreground">{campaign.description}</p>
         )}
 
+        {/* Banned accounts can't rejoin */}
+        {banned && (
+          <Card className="border-destructive/50">
+            <CardContent className="pt-4">
+              <div className="mb-2 flex items-center gap-2 font-medium">
+                <Ban className="h-4 w-4 text-destructive" />
+                {t("campaign.bannedTitle")}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {t("campaign.bannedDesc")}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Join gate for new members */}
-        {mounted && !myMemberId && (
+        {mounted && !myMemberId && !banned && (
           <Card className="border-primary/50">
             <CardContent className="pt-4">
               <div className="mb-2 flex items-center gap-2 font-medium">
@@ -132,8 +160,8 @@ function CampaignInner() {
               <p className="mb-3 text-sm text-muted-foreground">
                 {t("campaign.joinAs", { name: account?.displayName ?? "" })}
               </p>
-              <Button className="w-full" onClick={join}>
-                {t("campaign.joinCta")}
+              <Button className="w-full" onClick={join} disabled={joining}>
+                {joining ? t("common.pleaseWait") : t("campaign.joinCta")}
               </Button>
             </CardContent>
           </Card>
@@ -309,8 +337,36 @@ function CampaignInner() {
             entries={bundle.entries}
             hostId={campaign.hostId}
             myMemberId={myMemberId}
+            onManage={isDM ? setManaging : undefined}
           />
         </section>
+
+        {/* DM: banned accounts, with unban */}
+        {myMemberId && isDM && campaign.settings.banned.length > 0 && (
+          <section>
+            <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
+              {t("campaign.banned", { n: campaign.settings.banned.length })}
+            </h2>
+            <ul className="space-y-1.5">
+              {campaign.settings.banned.map((b) => (
+                <li
+                  key={b.accountId}
+                  className="flex items-center gap-3 rounded-xl border border-border/60 bg-card/50 px-3 py-2"
+                >
+                  <Ban className="h-4 w-4 shrink-0 text-destructive" />
+                  <span className="min-w-0 flex-1 truncate text-sm">{b.name}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => unbanAccount(campaign.id, b.accountId)}
+                  >
+                    {t("campaign.unban")}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* DM: delete the campaign */}
         {myMemberId && isDM && (
@@ -339,6 +395,12 @@ function CampaignInner() {
         onClose={() => setInvite(false)}
         code={campaign.inviteCode}
         campaignName={campaign.name}
+      />
+
+      <ManageMemberSheet
+        campaignId={campaign.id}
+        member={managing}
+        onClose={() => setManaging(null)}
       />
 
       <Modal

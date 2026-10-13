@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown } from "lucide-react";
+import { Crown, MoreHorizontal } from "lucide-react";
 import { CampaignMember, SchedulingRound } from "@/lib/core/types";
 import { AvailabilityEntry } from "@/lib/core/types";
 import { cn } from "@/lib/utils";
@@ -44,12 +44,15 @@ export function MemberList({
   entries,
   hostId,
   myMemberId,
+  onManage,
 }: {
   members: CampaignMember[];
   round?: SchedulingRound;
   entries: AvailabilityEntry[];
   hostId?: string;
   myMemberId?: string | null;
+  /** DM only: opens member management for everyone except the DM. */
+  onManage?: (member: CampaignMember) => void;
 }) {
   const { t } = useI18n();
   const totalCells = round ? round.dates.length * round.timeSlots.length : 0;
@@ -100,6 +103,15 @@ export function MemberList({
                     : "bg-muted-foreground/30",
               )}
             />
+            {onManage && m.id !== hostId && (
+              <button
+                onClick={() => onManage(m)}
+                aria-label={t("manage.open", { name: m.guestName ?? t("members.player") })}
+                className="-mr-1.5 rounded-full p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            )}
           </li>
         );
       })}

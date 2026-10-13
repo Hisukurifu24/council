@@ -39,6 +39,7 @@ export function rowToCampaign(r: any): Campaign {
     weights: r.settings?.weights ?? DEFAULT_WEIGHTS,
     timeSlots: (r.settings?.timeSlots ?? ["morning", "afternoon", "evening"]) as TimeSlot[],
     minPlayers: r.settings?.minPlayers ?? DEFAULT_MIN_PLAYERS,
+    banned: r.settings?.banned ?? [],
   };
   return {
     id: r.id,

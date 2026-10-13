@@ -45,6 +45,8 @@ export interface Backend {
   persistUpdateCampaign(campaign: Campaign): Promise<void>;
   persistDeleteCampaign(campaignId: string): Promise<void>;
   persistJoinMember(member: CampaignMember): Promise<void>;
+  persistUpdateMember(member: CampaignMember): Promise<void>;
+  persistRemoveMember(memberId: string): Promise<void>;
   persistSetAvailability(
     entry: AvailabilityEntry,
     member: CampaignMember | undefined,

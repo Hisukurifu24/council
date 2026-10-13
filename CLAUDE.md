@@ -41,7 +41,7 @@ npm run build    # static export to ./out
 ```
 
 Supabase env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) go
-in `.env.local`. Apply both migrations in `supabase/migrations/` before first run.
+in `.env.local`. Apply all migrations in `supabase/migrations/` before first run.
 
 ## Pages and routing
 
@@ -121,9 +121,19 @@ stop. Falls back to typed input when the API is unavailable. Supports EN and IT.
 
 Six tables: `campaigns`, `campaign_members`, `scheduling_rounds`,
 `availability_entries`, `sessions`, `accounts`. Child rows cascade-delete when a
-campaign is deleted. `availability_entries`, `campaign_members`, and `sessions` are
-in the `supabase_realtime` publication; per-campaign channels are opened lazily in
-`SupabaseBackend.ensureCampaign()` / `persistCreateCampaign()`.
+campaign is deleted. `availability_entries`, `campaign_members`, `sessions` and
+(from `0003`) `campaigns` are in the `supabase_realtime` publication; per-campaign
+channels are opened lazily in `SupabaseBackend.ensureCampaign()` /
+`persistCreateCampaign()`. Postgres can't filter Realtime DELETE events, so member
+deletes are listened to unfiltered and matched against the snapshot.
+
+### Member management (DM)
+
+The DM can kick (delete the member row — their availability cascades), ban
+(kick + add the account to `campaign.settings.banned`, a jsonb list), unban, and
+transfer the DM role (`campaigns.host_id` + both members' `role`). Like "only the
+DM confirms", this is enforced in the UI only. `joinCampaign()` re-reads the
+campaign before joining so a fresh ban is honoured without campaign Realtime.
 
 ### Rolling dates
 
