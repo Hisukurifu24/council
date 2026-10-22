@@ -588,36 +588,72 @@ export function useI18n(): I18nValue {
   return React.useContext(I18nContext);
 }
 
-export const LANGUAGE_STORAGE_KEY = "dndtime:language";
+// Only an explicit pick from the language switcher is stored; until then the
+// locale is detected on every load. (Renamed from "dndtime:language", which
+// was written unconditionally and so can't tell a real choice from the default.)
+export const LANGUAGE_STORAGE_KEY = "dndtime:locale";
+
+// Time zones located in Italy (plus the enclaves) — a permission-free proxy
+// for the device's position.
+const ITALIAN_TIME_ZONES = ["Europe/Rome", "Europe/Vatican", "Europe/San_Marino"];
+
+/**
+ * Picks a locale from the device's position (its time zone) and, failing
+ * that, its browser languages: Italian if the device is in Italy or the
+ * browser prefers Italian, English otherwise.
+ */
+export function localeFromHints(
+  timeZone: string | undefined,
+  languages: readonly string[],
+): Locale {
+  if (timeZone && ITALIAN_TIME_ZONES.includes(timeZone)) return "it";
+  if (languages.some((l) => l.toLowerCase().startsWith("it"))) return "it";
+  return "en";
+}
+
+function detectLocale(): Locale {
+  let timeZone: string | undefined;
+  try {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    // Older WebViews without Intl time zone support — fall back to language.
+  }
+  const languages = navigator.languages?.length
+    ? navigator.languages
+    : [navigator.language];
+  return localeFromHints(timeZone, languages);
+}
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = React.useState<Locale>("it");
 
   React.useEffect(() => {
     const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY) as Locale | null;
-    if (saved === "en" || saved === "it") {
-      setLocaleState(saved);
-    }
+    setLocaleState(saved === "en" || saved === "it" ? saved : detectLocale());
   }, []);
 
   React.useEffect(() => {
-    localStorage.setItem(LANGUAGE_STORAGE_KEY, locale);
     if (typeof document !== "undefined") {
       document.documentElement.lang = locale;
     }
   }, [locale]);
 
+  const setLocale = React.useCallback((l: Locale) => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, l);
+    setLocaleState(l);
+  }, []);
+
   const value = React.useMemo<I18nValue>(() => {
     const dict = STRINGS[locale];
     return {
       locale,
-      setLocale: setLocaleState,
+      setLocale,
       t: (key, params) => {
         const raw = dict[key] ?? STRINGS.en[key] ?? key;
         return format(raw, params);
       },
     };
-  }, [locale]);
+  }, [locale, setLocale]);
 
   return React.createElement(I18nContext.Provider, { value }, children);
 }
