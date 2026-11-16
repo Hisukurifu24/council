@@ -28,6 +28,7 @@
     --avail: 152 60% 45%;
     --maybe: 38 92% 55%;
     --unavail: 0 72% 55%;
+    --booked: 199 89% 42%; /* slot taken by a session in another campaign */
 
     --radius: 1rem;
     --font-sans: "Inter", system-ui, sans-serif;
@@ -59,6 +60,7 @@
     --avail: 152 58% 48%;
     --maybe: 38 92% 58%;
     --unavail: 0 70% 58%;
+    --booked: 199 90% 58%;
   }
 }
 

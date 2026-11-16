@@ -142,6 +142,28 @@ generates today → today+34 (35 days) on every render. `useCampaign()` patches 
 real `SchedulingRound.dates` with the fresh window so the planner never expires;
 availability entries keep their real `roundId`.
 
+### Cross-campaign availability (`src/lib/core/sync.ts`)
+
+Availability is still stored per campaign (member × round rows) but behaves as
+belonging to the **account**:
+
+- **Fan-out writes** — `setAvailability` / `setAvailabilityBulk` write the same
+  status to every membership of the account whose active round is loaded
+  (`syncTargets` in the store). Guests without `accountId` only write their own round.
+- **Reconciliation** — `ensureAccountCampaigns()` loads the account's active
+  rounds and its upcoming entries, then `reconcileMyAvailability()` copies the
+  most recent mark per cell (`planAvailabilitySync`, keeps the winner's
+  `updatedAt` so it's idempotent) to campaigns that lack or disagree with it.
+  `/plan/` calls it via `useEnsureMyCampaigns()`.
+- **Booked elsewhere** — `busyCells()` derives, by account, which members of a
+  campaign have a non-canceled session in another campaign;
+  `SupabaseBackend.loadOtherCommitments()` loads those memberships and sessions
+  on `ensureCampaign` (not live). `useCampaign()` overlays them with `applyBusy()`
+  so `bundle.entries` shows those members as unavailable (scoring, voter list);
+  `bundle.rawEntries` holds the real marks. Never persisted: canceling the
+  session restores the member's own mark. In the grid your busy cells get a
+  `--booked` border + `CalendarCheck` icon and can't be edited.
+
 ### Accessibility
 
 Availability status is conveyed by **icon + label**, never color alone (see

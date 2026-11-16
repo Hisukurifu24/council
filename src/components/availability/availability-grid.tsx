@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Crown, Star, Users } from "lucide-react";
+import { CalendarCheck, Check, Crown, Star, Users } from "lucide-react";
 import {
   AvailabilityStatus,
   SchedulingRound,
@@ -25,6 +25,10 @@ interface Props {
   /** When provided (DM only), the corner badge on viable/best/backup cells
    *  becomes a tap target to book a session for that slot. */
   onBook?: (date: string, slot: TimeSlot) => void;
+  /** Your sessions booked in another campaign: returns that campaign's name
+   *  ("" if unknown) for a taken cell, else undefined. Taken cells read as
+   *  unavailable, get a distinct border, and can't be edited. */
+  bookedElsewhere?: (date: string, slot: TimeSlot) => string | undefined;
 }
 
 // Cell background reflects *your* personal status only, so a glance answers
@@ -40,6 +44,8 @@ const MINE_BORDER: Record<AvailabilityStatus, string> = {
   unavailable: "hsl(var(--unavail) / 0.7)",
 };
 
+const BOOKED_BORDER = "hsl(var(--booked) / 0.9)";
+
 const LONG_PRESS_MS = 280; // hold this long on touch to start drag-painting
 const MOVE_CANCEL_PX = 10; // finger moves more than this before the hold → it's a scroll
 
@@ -52,6 +58,7 @@ export function AvailabilityGrid({
   isPast,
   onShowVoters,
   onBook,
+  bookedElsewhere,
 }: Props) {
   const { t } = useI18n();
   const fmt = useFormatDate();
@@ -65,16 +72,23 @@ export function AvailabilityGrid({
   const touchStart = React.useRef<{ x: number; y: number } | null>(null);
   const longPressTimer = React.useRef<number | null>(null);
 
+  const locked = React.useCallback(
+    (date: string, slot: TimeSlot) =>
+      (isPast?.(date, slot) ?? false) ||
+      bookedElsewhere?.(date, slot) !== undefined,
+    [isPast, bookedElsewhere],
+  );
+
   const apply = React.useCallback(
     (date: string, slot: TimeSlot, status: AvailabilityStatus) => {
-      if (!canEdit || (isPast?.(date, slot) ?? false)) return;
+      if (!canEdit || locked(date, slot)) return;
       onSet(date, slot, status);
     },
-    [canEdit, isPast, onSet],
+    [canEdit, locked, onSet],
   );
 
   const startPaint = (date: string, slot: TimeSlot) => {
-    if (isPast?.(date, slot)) return;
+    if (locked(date, slot)) return;
     const next = cycleStatus(myStatus(date, slot));
     painting.current = next;
     apply(date, slot, next);
@@ -182,6 +196,8 @@ export function AvailabilityGrid({
                 const score = model.byCell.get(id);
                 const mine = myStatus(date, slot);
                 const past = isPast?.(date, slot) ?? false;
+                const bookedIn = past ? undefined : bookedElsewhere?.(date, slot);
+                const booked = bookedIn !== undefined;
                 const isBest = model.bestId === id;
                 const isBackup = model.backupId === id;
                 const isViable =
@@ -215,7 +231,20 @@ export function AvailabilityGrid({
                         : "",
                       viableFrag: isViable ? t("grid.viableFrag") : "",
                       mine: mine ? t(`status.${mine}`) : t("status.notSet"),
-                    })}
+                    }) +
+                      (booked
+                        ? bookedIn
+                          ? t("grid.bookedInFrag", { name: bookedIn })
+                          : t("grid.bookedFrag")
+                        : "")}
+                    aria-disabled={booked || undefined}
+                    title={
+                      booked
+                        ? bookedIn
+                          ? t("grid.bookedIn", { name: bookedIn })
+                          : t("grid.booked")
+                        : undefined
+                    }
                     onPointerDown={(e) => {
                       if (!canEdit) return;
                       if (e.pointerType === "mouse") {
@@ -260,7 +289,7 @@ export function AvailabilityGrid({
                       "relative flex h-16 flex-col items-center justify-center pt-2 pb-2 rounded-xl border transition-all",
                       past
                         ? "cursor-default opacity-35"
-                        : canEdit
+                        : canEdit && !booked
                           ? "hover:border-primary/60"
                           : "cursor-default",
                       !past && isViable && !isBest && !isBackup &&
@@ -270,8 +299,9 @@ export function AvailabilityGrid({
                     )}
                     style={{
                       background: mine && !past ? MINE_BG[mine] : "transparent",
-                      borderColor:
-                        mine && !past
+                      borderColor: booked
+                        ? BOOKED_BORDER
+                        : mine && !past
                           ? MINE_BORDER[mine]
                           : "hsl(var(--border) / 0.7)",
                       borderWidth: mine && !past ? 2 : 1,
@@ -386,6 +416,17 @@ export function AvailabilityGrid({
                           }}
                         />
                       </span>
+                    )}
+
+                    {/* booked in another campaign — icon so it isn't
+                        conveyed by the border color alone */}
+                    {booked && (
+                      <CalendarCheck
+                        aria-hidden
+                        className="absolute bottom-1 right-1 h-3 w-3"
+                        style={{ color: "hsl(var(--booked))" }}
+                        strokeWidth={2.5}
+                      />
                     )}
 
                     {/* "who voted" — top-left affordance to open the per-slot

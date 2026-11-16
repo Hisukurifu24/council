@@ -23,6 +23,7 @@ import {
   rowToSession,
   sessionToRow,
 } from "../supabase/mappers";
+import { todayISO } from "../utils";
 import { Backend, StoreApi } from "./types";
 
 /**
@@ -97,12 +98,65 @@ export class SupabaseBackend implements Backend {
     const round = rounds?.[0] ? rowToRound(rounds[0]) : undefined;
     if (round) {
       this.api.upsertRound(round);
-      const entries = await this.loadEntries(round.id);
+      const entries = await this.loadEntries({ roundId: round.id });
       entries.forEach((e) => this.api.upsertAvailability(e));
     }
     sessions?.forEach((s) => this.api.upsertSession(rowToSession(s)));
 
+    if (members) {
+      const accountIds = members
+        .map((m: { account_id?: string | null }) => m.account_id)
+        .filter((a): a is string => !!a);
+      await this.loadOtherCommitments(campaign.id, accountIds);
+    }
+
     this.subscribeCampaign(campaign.id, round?.id);
+  }
+
+  /**
+   * Sessions this campaign's members have booked in *other* campaigns, so the
+   * planner can show them as busy there (see `busyCells`). Loads those
+   * memberships and the upcoming non-canceled sessions of their campaigns.
+   * Refreshed on each load — not live — which is fine for a slot booked days
+   * ahead.
+   */
+  private async loadOtherCommitments(campaignId: string, accountIds: string[]) {
+    const sb = this.sb;
+    if (!sb || accountIds.length === 0) return;
+    const { data: elsewhere, error } = await sb
+      .from("campaign_members")
+      .select(MEMBER_COLUMNS)
+      .in("account_id", accountIds)
+      .neq("campaign_id", campaignId);
+    check("load other memberships", error);
+    if (!elsewhere) return;
+
+    // Drop stale memberships (left/kicked since last load) for these accounts.
+    const live = new Set(elsewhere.map((m: { id: string }) => m.id));
+    const accounts = new Set(accountIds);
+    for (const m of Object.values(this.api.getSnapshot().members)) {
+      if (
+        m.campaignId !== campaignId &&
+        m.accountId &&
+        accounts.has(m.accountId) &&
+        !live.has(m.id)
+      ) {
+        this.api.removeMember(m.id);
+      }
+    }
+    elsewhere.forEach((m) => this.api.upsertMember(rowToMember(m)));
+
+    const otherIds = Array.from(
+      new Set(elsewhere.map((m: { campaign_id: string }) => m.campaign_id)),
+    );
+    if (otherIds.length === 0) return;
+    const { data: sessions, error: sErr } = await sb
+      .from("sessions")
+      .select("*")
+      .in("campaign_id", otherIds)
+      .gte("date", todayISO());
+    check("load other sessions", sErr);
+    sessions?.forEach((s) => this.api.upsertSession(rowToSession(s)));
   }
 
   /**
@@ -116,16 +170,20 @@ export class SupabaseBackend implements Backend {
    * "availability saves, then disappears on refresh". Page through instead,
    * ordering by id so the pages tile the result exactly.
    */
-  private async loadEntries(roundId: string): Promise<AvailabilityEntry[]> {
+  private async loadEntries(
+    filter: { roundId: string } | { memberIds: string[]; fromDate: string },
+  ): Promise<AvailabilityEntry[]> {
     const sb = this.sb;
     if (!sb) return [];
     const pageSize = 1000;
     const all: AvailabilityEntry[] = [];
     for (let from = 0; ; from += pageSize) {
-      const { data, error } = await sb
-        .from("availability_entries")
-        .select("*")
-        .eq("round_id", roundId)
+      let q = sb.from("availability_entries").select("*");
+      q =
+        "roundId" in filter
+          ? q.eq("round_id", filter.roundId)
+          : q.in("member_id", filter.memberIds).gte("date", filter.fromDate);
+      const { data, error } = await q
         .order("id")
         .range(from, from + pageSize - 1);
       check("load availability", error);
@@ -136,27 +194,42 @@ export class SupabaseBackend implements Backend {
     return all;
   }
 
+  /**
+   * The account's campaigns, plus what cross-campaign sync needs: each
+   * campaign's active round and the account's own upcoming availability in
+   * all of them (the store then reconciles them, see `reconcileMyAvailability`).
+   */
   async ensureAccountCampaigns(accountId: string) {
     const sb = this.sb;
     if (!sb || !accountId) return;
     const { data: myMembers } = await sb
       .from("campaign_members")
-      .select("campaign_id")
+      .select("id, campaign_id")
       .eq("account_id", accountId);
     const ids = Array.from(
       new Set((myMembers ?? []).map((m: { campaign_id: string }) => m.campaign_id)),
     );
     if (ids.length === 0) return;
+    const myMemberIds = (myMembers ?? []).map((m: { id: string }) => m.id);
 
-    const [{ data: campaigns }, { data: members }, { data: sessions }] =
+    const [{ data: campaigns }, { data: members }, { data: sessions }, { data: rounds }] =
       await Promise.all([
         sb.from("campaigns").select("*").in("id", ids),
         sb.from("campaign_members").select(MEMBER_COLUMNS).in("campaign_id", ids),
         sb.from("sessions").select("*").in("campaign_id", ids),
+        sb
+          .from("scheduling_rounds")
+          .select("*")
+          .in("campaign_id", ids)
+          .eq("status", "active"),
       ]);
     campaigns?.forEach((c) => this.api.upsertCampaign(rowToCampaign(c)));
     members?.forEach((m) => this.api.upsertMember(rowToMember(m)));
     sessions?.forEach((s) => this.api.upsertSession(rowToSession(s)));
+    rounds?.forEach((r) => this.api.upsertRound(rowToRound(r)));
+
+    const mine = await this.loadEntries({ memberIds: myMemberIds, fromDate: todayISO() });
+    mine.forEach((e) => this.api.upsertAvailability(e));
   }
 
   // ---- accounts ------------------------------------------------------------

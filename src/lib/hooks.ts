@@ -32,6 +32,7 @@ import {
   TIME_SLOTS,
   AvailabilityStatus,
 } from "./core/types";
+import { BusyMap, applyBusy, busyCells } from "./core/sync";
 import type { AuthSession } from "./auth";
 import { rollingDates, addDaysISO, todayISO, isSlotPast } from "./utils";
 
@@ -86,7 +87,13 @@ export interface CampaignBundle {
   campaign?: Campaign;
   members: CampaignMember[];
   round?: SchedulingRound;
+  /** Effective availability: members' marks, with slots booked in another
+   *  campaign forced to "unavailable" (see `applyBusy`). */
   entries: AvailabilityEntry[];
+  /** Only what members actually marked in this campaign's round. */
+  rawEntries: AvailabilityEntry[];
+  /** Members with a session booked elsewhere: memberId -> cell -> why. */
+  busy: BusyMap;
   sessions: Session[];
   myMemberId: string | null;
 }
@@ -96,7 +103,14 @@ export function useCampaign(code: string): CampaignBundle {
   return useMemo<CampaignBundle>(() => {
     const campaign = getCampaignByCode(code);
     if (!campaign) {
-      return { members: [], entries: [], sessions: [], myMemberId: null };
+      return {
+        members: [],
+        entries: [],
+        rawEntries: [],
+        busy: new Map(),
+        sessions: [],
+        myMemberId: null,
+      };
     }
     const realRound = getActiveRound(campaign.id);
     const sessions = getSessions(campaign.id);
@@ -124,11 +138,20 @@ export function useCampaign(code: string): CampaignBundle {
             : [...TIME_SLOTS],
         }
       : undefined;
+    const db = getSnapshot();
+    const busy = busyCells(
+      campaign.id,
+      Object.values(db.members),
+      Object.values(db.sessions),
+    );
+    const rawEntries = realRound ? getEntriesForRound(realRound.id) : [];
     return {
       campaign,
       members: getMembers(campaign.id),
       round,
-      entries: realRound ? getEntriesForRound(realRound.id) : [],
+      entries: realRound ? applyBusy(rawEntries, busy, realRound.id) : [],
+      rawEntries,
+      busy,
       sessions,
       myMemberId: getMyMemberId(campaign.id),
     };

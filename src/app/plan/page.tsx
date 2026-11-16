@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Share2, Sparkles, CalendarCheck } from "lucide-react";
+import { Share2, Sparkles, CalendarCheck, Link2 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthGate } from "@/components/auth/auth-gate";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,9 @@ import { MemberAvatar } from "@/components/campaign/member-list";
 import {
   useCampaign,
   useCurrentAccount,
+  useDb,
   useEnsureCampaign,
+  useEnsureMyCampaigns,
   useMounted,
   useScores,
   statusFor,
@@ -47,6 +49,9 @@ function PlanInner() {
   const mounted = useMounted();
   const account = useCurrentAccount();
   const loading = useEnsureCampaign(code);
+  // Your other campaigns' rounds + availability, so marks sync across them.
+  useEnsureMyCampaigns();
+  const db = useDb();
   const bundle = useCampaign(code);
   const model = useScores(bundle);
   const [invite, setInvite] = React.useState(false);
@@ -57,7 +62,7 @@ function PlanInner() {
     timeSlot: TimeSlot;
   } | null>(null);
 
-  const { campaign, round, members, entries, myMemberId } = bundle;
+  const { campaign, round, members, entries, rawEntries, busy, myMemberId } = bundle;
 
   if (mounted && !loading && !campaign) {
     return (
@@ -104,6 +109,15 @@ function PlanInner() {
     );
   }
 
+  // Your slots taken by a session in another campaign.
+  const myBusy = myMemberId ? busy.get(myMemberId) : undefined;
+  const bookedElsewhere = myBusy?.size
+    ? (date: string, slot: TimeSlot) => {
+        const info = myBusy.get(slotKeyId(date, slot));
+        return info ? (db.campaigns[info.campaignId]?.name ?? "") : undefined;
+      }
+    : undefined;
+
   const onSet = (date: string, slot: TimeSlot, status: AvailabilityStatus) => {
     if (!myMemberId) return;
     setAvailability(round.id, myMemberId, date, slot, status);
@@ -114,7 +128,11 @@ function PlanInner() {
     status: AvailabilityStatus,
   ) => {
     if (!myMemberId) return;
-    setAvailabilityBulk(round.id, myMemberId, cells, status);
+    // Slots booked in another campaign stay locked, like in the grid.
+    const free = cells.filter(
+      (c) => !myBusy?.has(slotKeyId(c.date, c.timeSlot)),
+    );
+    setAvailabilityBulk(round.id, myMemberId, free, status);
   };
 
   const openConfirm = (slot: SlotScore) => {
@@ -138,7 +156,7 @@ function PlanInner() {
     router.push(`/session/?code=${code}&id=${session.id}`);
   };
 
-  const responded = new Set(entries.map((e) => e.memberId)).size;
+  const responded = new Set(rawEntries.map((e) => e.memberId)).size;
   const minP = campaign.settings.minPlayers;
   const playerLabel = minP === 1 ? t("plan.player") : t("plan.players");
 
@@ -203,6 +221,15 @@ function PlanInner() {
           <StatusChip status="available" className="text-xs" />
           <StatusChip status="maybe" className="text-xs" />
           <StatusChip status="unavailable" className="text-xs" />
+          {bookedElsewhere && (
+            <span
+              className="inline-flex items-center gap-1.5 text-xs"
+              style={{ color: "hsl(var(--booked))" }}
+            >
+              <CalendarCheck className="h-4 w-4" strokeWidth={2.5} />
+              {t("plan.legend.booked")}
+            </span>
+          )}
         </div>
 
         {/* Voice / typed marking */}
@@ -238,6 +265,7 @@ function PlanInner() {
           }
           onSet={onSet}
           isPast={isSlotPast}
+          bookedElsewhere={bookedElsewhere}
           onShowVoters={(date, slot) =>
             setVotersSlot({ date, timeSlot: slot })
           }
@@ -254,6 +282,10 @@ function PlanInner() {
         <p className="text-center text-xs text-muted-foreground">
           {t("plan.footer", { n: minP, playerLabel })}
           {!isDM && t("plan.footer.dmHint")}
+        </p>
+        <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+          <Link2 className="h-3.5 w-3.5" aria-hidden />
+          {t("plan.syncNote")}
         </p>
       </div>
 

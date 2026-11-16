@@ -20,7 +20,8 @@ import {
   SignUpInput,
   LogInInput,
 } from "./core/schemas";
-import { inviteCode, pickColor, randomId, rollingDates } from "./utils";
+import { inviteCode, pickColor, randomId, rollingDates, todayISO } from "./utils";
+import { SyncTarget, planAvailabilitySync } from "./core/sync";
 import {
   clearCurrentAccount,
   getCurrentAccount,
@@ -309,6 +310,7 @@ export async function ensureAccountCampaigns(): Promise<void> {
   const acct = getCurrentAccount();
   if (!acct) return;
   await backend.ensureAccountCampaigns(acct.id);
+  reconcileMyAvailability();
 }
 
 // ---- auth (lightweight email + password; see src/lib/auth.ts) --------------
@@ -635,34 +637,33 @@ export function joinAsGuest(
   return member;
 }
 
-export function setAvailability(
-  roundId: string,
-  memberId: string,
-  date: string,
-  timeSlot: TimeSlot,
-  status: AvailabilityStatus,
-): void {
-  const key = avKey(roundId, memberId, date, timeSlot);
-  const existing = snapshot.availability[key];
-  const entry: AvailabilityEntry = {
-    id: existing?.id ?? randomId(""),
-    roundId,
-    memberId,
-    date,
-    timeSlot,
-    status,
-    updatedAt: new Date().toISOString(),
-  };
-  // A tap is the local truth, so apply it directly rather than through
-  // `upsertAvailability` — that path is reconciliation and drops anything not
-  // newer than what's stored, which silently swallowed the tap whenever the
-  // stored row carried a timestamp ahead of this device's clock.
+/**
+ * The account's memberships whose active rounds mirror `memberId`'s
+ * availability: the origin first, then every other campaign the same account
+ * belongs to (whose active round is loaded). Guests without an account only
+ * ever write to their own round.
+ */
+function syncTargets(roundId: string, memberId: string): SyncTarget[] {
+  const origin: SyncTarget = { roundId, memberId };
+  const accountId = snapshot.members[memberId]?.accountId;
+  if (!accountId) return [origin];
+  const targets = [origin];
+  for (const m of Object.values(snapshot.members)) {
+    if (m.accountId !== accountId || m.id === memberId) continue;
+    const round = getActiveRound(m.campaignId);
+    if (round) targets.push({ roundId: round.id, memberId: m.id });
+  }
+  return targets;
+}
+
+/** Apply one cell locally and queue its write behind earlier writes to it. */
+function writeCell(entry: AvailabilityEntry) {
+  const key = avKey(entry.roundId, entry.memberId, entry.date, entry.timeSlot);
   snapshot = {
     ...snapshot,
     availability: { ...snapshot.availability, [key]: entry },
   };
-  emit();
-  const member = snapshot.members[memberId];
+  const member = snapshot.members[entry.memberId];
   // Serialize writes to this cell so a burst of taps commits in order.
   const prev = availWriteChains.get(key) ?? Promise.resolve();
   const next = prev
@@ -675,8 +676,40 @@ export function setAvailability(
 }
 
 /**
+ * Set your status for a cell. Availability belongs to the account, so the same
+ * status is written to every campaign you're in (see `syncTargets`).
+ */
+export function setAvailability(
+  roundId: string,
+  memberId: string,
+  date: string,
+  timeSlot: TimeSlot,
+  status: AvailabilityStatus,
+): void {
+  const updatedAt = new Date().toISOString();
+  // A tap is the local truth, so apply it directly rather than through
+  // `upsertAvailability` — that path is reconciliation and drops anything not
+  // newer than what's stored, which silently swallowed the tap whenever the
+  // stored row carried a timestamp ahead of this device's clock.
+  for (const t of syncTargets(roundId, memberId)) {
+    const existing = snapshot.availability[avKey(t.roundId, t.memberId, date, timeSlot)];
+    writeCell({
+      id: existing?.id ?? randomId(""),
+      roundId: t.roundId,
+      memberId: t.memberId,
+      date,
+      timeSlot,
+      status,
+      updatedAt,
+    });
+  }
+  emit();
+}
+
+/**
  * Mark many cells at once (the "Mark all" tool). Updates the snapshot a single
  * time and pushes one batched upsert, rather than firing a write per cell.
+ * Like `setAvailability`, it fans out to every campaign of the account.
  */
 export function setAvailabilityBulk(
   roundId: string,
@@ -688,20 +721,58 @@ export function setAvailabilityBulk(
   const now = new Date().toISOString();
   const availability = { ...snapshot.availability };
   const entries: AvailabilityEntry[] = [];
-  for (const { date, timeSlot } of cells) {
-    const key = avKey(roundId, memberId, date, timeSlot);
-    const entry: AvailabilityEntry = {
-      id: availability[key]?.id ?? randomId(""),
-      roundId,
-      memberId,
-      date,
-      timeSlot,
-      status,
-      updatedAt: now,
-    };
-    availability[key] = entry;
-    entries.push(entry);
+  for (const t of syncTargets(roundId, memberId)) {
+    for (const { date, timeSlot } of cells) {
+      const key = avKey(t.roundId, t.memberId, date, timeSlot);
+      const entry: AvailabilityEntry = {
+        id: availability[key]?.id ?? randomId(""),
+        roundId: t.roundId,
+        memberId: t.memberId,
+        date,
+        timeSlot,
+        status,
+        updatedAt: now,
+      };
+      availability[key] = entry;
+      entries.push(entry);
+    }
   }
+  snapshot = { ...snapshot, availability };
+  emit();
+  void backend.persistSetAvailabilityBulk(entries);
+}
+
+/**
+ * Bring the logged-in account's availability into line across all its
+ * campaigns: for each upcoming cell the most recent mark wins and is copied to
+ * campaigns that lack it or disagree. This is what makes joining a new campaign
+ * start from the calendar you already filled in elsewhere. Writes only on a
+ * difference, so it is a no-op once campaigns agree.
+ */
+export function reconcileMyAvailability(): void {
+  const acct = getCurrentAccount();
+  if (!acct) return;
+  const targets: SyncTarget[] = [];
+  for (const m of Object.values(snapshot.members)) {
+    if (m.accountId !== acct.id) continue;
+    const round = getActiveRound(m.campaignId);
+    if (round) targets.push({ roundId: round.id, memberId: m.id });
+  }
+  const plan = planAvailabilitySync(
+    targets,
+    Object.values(snapshot.availability),
+    todayISO(),
+  ).filter(
+    // Don't overwrite a cell with a tap of ours still in flight.
+    (e) => !availWriteChains.has(avKey(e.roundId, e.memberId, e.date, e.timeSlot)),
+  );
+  if (plan.length === 0) return;
+  const availability = { ...snapshot.availability };
+  const entries = plan.map((e) => {
+    const entry = { ...e, id: e.id || randomId("") };
+    availability[avKey(e.roundId, e.memberId, e.date, e.timeSlot)] = entry;
+    return entry;
+  });
   snapshot = { ...snapshot, availability };
   emit();
   void backend.persistSetAvailabilityBulk(entries);

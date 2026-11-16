@@ -131,6 +131,8 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "plan.notFound": "Campaign not found.",
     "plan.joinTitle": "Join to start marking",
     "plan.legend.hint": "Tap to cycle · hold & drag to paint:",
+    "plan.legend.booked": "Booked elsewhere",
+    "plan.syncNote": "Your availability is shared across all your campaigns.",
     "plan.empty":
       "Mark a few slots and recommendations will appear here.",
     "plan.responded": "{a}/{b} responded",
@@ -280,6 +282,10 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "grid.viableFrag": ", viable session",
     "grid.seeWhoVoted": "See who voted for {weekday} {day} {slot}",
     "grid.bookSlot": "Book a session for {weekday} {day} {slot}",
+    "grid.booked": "You have a session in another campaign",
+    "grid.bookedIn": "You have a session in {name}",
+    "grid.bookedFrag": ", booked in another campaign",
+    "grid.bookedInFrag": ", booked in {name}",
 
     // Setup notice
     "setup.title": "Supabase isn't configured",
@@ -408,6 +414,8 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "plan.notFound": "Campagna non trovata.",
     "plan.joinTitle": "Entra per iniziare a segnare",
     "plan.legend.hint": "Tocca per ciclare · tieni premuto e trascina per dipingere:",
+    "plan.legend.booked": "Prenotato altrove",
+    "plan.syncNote": "Le tue disponibilità sono condivise tra tutte le tue campagne.",
     "plan.empty":
       "Segna qualche slot e qui appariranno i suggerimenti.",
     "plan.responded": "{a}/{b} hanno risposto",
@@ -557,6 +565,10 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     "grid.viableFrag": ", sessione valida",
     "grid.seeWhoVoted": "Vedi chi ha votato per {weekday} {day} {slot}",
     "grid.bookSlot": "Prenota una sessione per {weekday} {day} {slot}",
+    "grid.booked": "Hai una sessione in un'altra campagna",
+    "grid.bookedIn": "Hai una sessione in {name}",
+    "grid.bookedFrag": ", prenotato in un'altra campagna",
+    "grid.bookedInFrag": ", prenotato in {name}",
 
     // Setup notice
     "setup.title": "Supabase non è configurato",
